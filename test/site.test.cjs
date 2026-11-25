@@ -27,7 +27,7 @@ test("registration requires login and preserves the selected event", () => {
   assert.match(registration, /login\.html\?next=/);
   assert.match(registration, /eventId=/);
   assert.match(login, /Store\.signup\(Object\.fromEntries\(new FormData\(e\.target\)\),/);
-  assert.match(login, /emailRedirectTo:/);
+  assert.match(store, /emailRedirectTo: emailRedirectTo \|\| undefined/);
   assert.match(store, /signup: async function \(u, emailRedirectTo\)/);
 });
 
