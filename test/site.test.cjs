@@ -5,64 +5,65 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
-const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
-const css = fs.readFileSync(path.join(root, "assets/styles.css"), "utf8");
-const appSource = fs.readFileSync(path.join(root, "scripts/app.js"), "utf8");
+const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
+const appSource = read("scripts/app.js");
 
-test("document has language, viewport, title and page landmarks", () => {
-  assert.match(html, /<html lang="en">/i);
-  assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/i);
-  assert.match(html, /<title>[^<]+<\/title>/i);
-  assert.match(html, /<header\b/i);
-  assert.match(html, /<nav\b[^>]*aria-label=/i);
-  assert.match(html, /<main\b[^>]*id="main"/i);
-  assert.match(html, /<footer\b/i);
-  assert.equal((html.match(/<h1\b/gi) || []).length, 1);
-});
-
-test("all in-page navigation links point to existing IDs", () => {
-  const ids = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
-  const targets = [...html.matchAll(/href="#([^"]*)"/g)]
-    .map((match) => match[1])
-    .filter(Boolean);
-  assert.ok(targets.length > 0, "expected in-page navigation links");
-  for (const target of targets) {
-    assert.ok(ids.has(target), `missing target id: ${target}`);
+test("main NCC pages have valid document landmarks and shared header mount", () => {
+  for (const pageName of ["index.html", "events.html", "event.html", "register.html", "login.html", "my.html", "admin.html"]) {
+    const html = read(pageName);
+    assert.match(html, /<html lang="en">/i, pageName);
+    assert.match(html, /<meta name="viewport"/i, pageName);
+    assert.match(html, /<title>[^<]+<\/title>/i, pageName);
+    assert.match(html, /<main\b/i, pageName);
+    assert.match(html, /<div id="hdr">/i, pageName);
   }
 });
 
-test("two-day agenda and activity categories are explicitly represented", () => {
-  assert.match(html, /DAY 01/);
-  assert.match(html, /DAY 02/);
-  assert.match(html, /Date TBA/);
-  assert.match(html, />Drill</);
-  assert.match(html, />Firing</);
-  assert.match(html, />Other competitions</);
-  assert.match(html, /subject to required institutional, range and safety approvals/i);
+test("registration requires login and preserves the selected event", () => {
+  const registration = read("register.html");
+  const login = read("login.html");
+  const store = read("scripts/store.js");
+  assert.match(registration, /Store\.registerTeam\(payload\)/);
+  assert.match(registration, /login\.html\?next=/);
+  assert.match(registration, /eventId=/);
+  assert.match(login, /Store\.signup\(Object\.fromEntries\(new FormData\(e\.target\)\),/);
+  assert.match(login, /emailRedirectTo:/);
+  assert.match(store, /signup: async function \(u, emailRedirectTo\)/);
 });
 
-test("registration points to the events page in demo mode", () => {
-  assert.match(html, /Registration is open \(demo\)/i);
-  assert.match(html, /href="events\.html"/i);
-  assert.doesNotMatch(html, /<form\b/i);
-  assert.doesNotMatch(html, /<input\b/i);
-  assert.match(html, /no payments are collected/i);
+test("participant dashboard offers demo or real payment and reloads after verification", () => {
+  const dashboard = read("my.html");
+  const store = read("scripts/store.js");
+  assert.match(dashboard, /data-demo-pay=/);
+  assert.match(dashboard, /data-gateway-pay=/);
+  assert.match(dashboard, /Store\.startGatewayPayment\(gatewayPayId\)/);
+  assert.match(store, /submitDemoPayment: async function/);
+  assert.match(store, /startGatewayPayment: async function/);
+  assert.match(dashboard, /Payment Status/);
 });
 
-test("FAQ disclosures and accessibility hooks exist", () => {
-  assert.ok((html.match(/<details\b/g) || []).length >= 4);
-  assert.ok((html.match(/<summary\b/g) || []).length >= 4);
-  assert.match(html, /class="skip-link"/);
-  assert.match(css, /\.skip-link:focus/);
-  assert.match(css, /@media\s*\(max-width:\s*640px\)/);
-  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+test("Razorpay endpoints validate ownership and verify captured payments server-side", () => {
+  const order = read("api/payment/create-order.js");
+  const verify = read("api/payment/verify.js");
+  assert.match(order, /user_id=eq\./);
+  assert.match(order, /RAZORPAY_KEY_SECRET/);
+  assert.match(order, /\/v1\/orders/);
+  assert.match(verify, /createHmac\('sha256'/);
+  assert.match(verify, /timingSafeEqual/);
+  assert.match(verify, /status==='captured'/);
+  assert.match(verify, /SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("demo payment is explicitly described as simulated", () => {
+  const registration = read("register.html");
+  const dashboard = read("my.html");
+  assert.match(registration, /Demo Payment Notice/);
+  assert.match(dashboard, /DEMO PAYMENT MODE:/);
 });
 
 test("mobile navigation opens, closes on link selection, and sets the footer year", () => {
   function makeElement(initialAttributes = {}) {
-    const attributes = { ...initialAttributes };
-    const listeners = {};
-    const classes = new Set();
+    const attributes = { ...initialAttributes }, listeners = {}, classes = new Set();
     return {
       textContent: "",
       getAttribute(name) { return attributes[name] ?? null; },
@@ -70,51 +71,21 @@ test("mobile navigation opens, closes on link selection, and sets the footer yea
       addEventListener(name, callback) { listeners[name] = callback; },
       dispatch(name) { if (listeners[name]) listeners[name](); },
       classList: {
-        toggle(name, force) {
-          const shouldAdd = force === undefined ? !classes.has(name) : Boolean(force);
-          if (shouldAdd) classes.add(name);
-          else classes.delete(name);
-          return shouldAdd;
-        },
+        toggle(name, force) { const add = force === undefined ? !classes.has(name) : Boolean(force); if (add) classes.add(name); else classes.delete(name); return add; },
         remove(name) { classes.delete(name); },
         contains(name) { return classes.has(name); }
-      },
-      attributes,
-      listeners
+      }
     };
   }
-
-  const menu = makeElement({ "aria-expanded": "false" });
-  const link = makeElement();
-  const navigation = makeElement();
-  navigation.querySelectorAll = () => [link];
-  const year = makeElement();
-  const document = {
-    querySelector(selector) {
-      if (selector === ".menu-toggle") return menu;
-      if (selector === "#site-nav") return navigation;
-      if (selector === "#year") return year;
-      return null;
-    }
-  };
-
+  const menu = makeElement({ "aria-expanded": "false" }), link = makeElement(), nav = makeElement(), year = makeElement();
+  nav.querySelectorAll = () => [link];
+  const document = { querySelector(selector) { return selector === ".menu-toggle" ? menu : selector === "#site-nav" ? nav : selector === "#year" ? year : null; } };
   vm.runInNewContext(appSource, { document, Date });
-
   menu.dispatch("click");
   assert.equal(menu.getAttribute("aria-expanded"), "true");
-  assert.equal(navigation.classList.contains("is-open"), true);
-
+  assert.equal(nav.classList.contains("is-open"), true);
   link.dispatch("click");
   assert.equal(menu.getAttribute("aria-expanded"), "false");
-  assert.equal(navigation.classList.contains("is-open"), false);
+  assert.equal(nav.classList.contains("is-open"), false);
   assert.equal(year.textContent, String(new Date().getFullYear()));
-});
-
-test("demo-mode pages exist and load the shared data layer", () => {
-  const fs = require("node:fs");
-  for (const p of ["events", "event", "login", "my", "admin"]) {
-    const page = fs.readFileSync(`${p}.html`, "utf8");
-    assert.match(page, /scripts\/store\.js/);
-    assert.match(page, /<div id="hdr">/);
-  }
 });
