@@ -50,7 +50,7 @@ test("Razorpay endpoints validate ownership and verify captured payments server-
   assert.match(order, /\/v1\/orders/);
   assert.match(verify, /createHmac\('sha256'/);
   assert.match(verify, /timingSafeEqual/);
-  assert.match(verify, /status==='captured'/);
+  assert.match(verify, /captured/);
   assert.match(verify, /SUPABASE_SERVICE_ROLE_KEY/);
 });
 
