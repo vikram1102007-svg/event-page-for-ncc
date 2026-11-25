@@ -22,6 +22,13 @@ where email = 'your-admin-email@college.edu';
 - Local setup: update `scripts/config.js` (copied from `scripts/config.example.js`) with `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and your college/NCC unit details.
 - Hosting setup (Embarko, Netlify, Vercel, Cloudflare Pages): configure `SUPABASE_URL` and `SUPABASE_ANON_KEY` as environment variables and set build command to `npm run build` with publish directory `.`.
 
-## 4. Payment Mode Note
-- The system starts in clearly labelled **Demo Payment Mode**. Participants can submit a simulated demo payment reference (`DEMO-...`), while payment status remains `Pending` until verified by an authorized admin (`Paid` / `Failed` / `Refunded`).
+## 4. Razorpay Payment Setup
+1. In Vercel, set `RAZORPAY_KEY_ID` (public), `RAZORPAY_KEY_SECRET` (server-only), `SUPABASE_SERVICE_ROLE_KEY` (server-only), and `DEMO_PAYMENT_MODE=false`.
+2. Keep `SUPABASE_URL` and `SUPABASE_ANON_KEY` configured for the frontend. The build writes only the public Razorpay Key ID into `scripts/config.js`.
+3. Start with Razorpay Test Mode keys, then deploy again after adding the environment variables.
+4. The server creates orders only for the logged-in owner of a registration, verifies the signature, checks the payment with Razorpay, and marks it Paid only after capture.
+5. Never put `RAZORPAY_KEY_SECRET` or `SUPABASE_SERVICE_ROLE_KEY` in browser code or public config.
+
+## 5. Demo Payment Mode
+- Demo mode creates a simulated `DEMO-...` reference only; no money is transferred and status remains `Pending` until admin verification.
 - Real payment gateway integration (such as Razorpay) requires server-side order creation and backend webhook/signature verification with gateway secrets stored only on the backend.
