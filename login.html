@@ -122,7 +122,7 @@
 
       $('f2').onsubmit = async function (e) {
         e.preventDefault();
-        const r = await Store.signup(Object.fromEntries(new FormData(e.target)));
+        const r = await Store.signup(Object.fromEntries(new FormData(e.target)), window.location.origin + window.location.pathname + '?next=' + encodeURIComponent(next));
         if (!r.ok) {
           showMsg(r.msg, false);
         } else if (r.needsEmailConfirmation) {
