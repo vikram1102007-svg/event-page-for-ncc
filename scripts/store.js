@@ -200,7 +200,23 @@
         return null;
       }
       const profRes = await sb.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
-      if (profRes.error || !profRes.data) {
+      let profileData = profRes.data;
+      if (!profRes.error && !profileData) {
+        const meta = authUser.user_metadata || {};
+        const profileRes = await sb.from('profiles').upsert({
+          id: authUser.id,
+          email: String(authUser.email || '').toLowerCase(),
+          name: meta.name || authUser.email || 'Participant',
+          reg_no: meta.reg_no || '',
+          dept: meta.dept || '',
+          year: meta.year || '1',
+          phone: meta.phone || '',
+          college: meta.college || '',
+          ncc_unit: meta.ncc_unit || ''
+        }, { onConflict: 'id' }).select('*').maybeSingle();
+        if (!profileRes.error) profileData = profileRes.data;
+      }
+      if (profRes.error || !profileData) {
         cachedUser = {
           id: authUser.id,
           email: authUser.email || '',
@@ -215,7 +231,7 @@
         };
         return cachedUser;
       }
-      const p = profRes.data;
+      const p = profileData;
       cachedUser = {
         id: p.id,
         email: p.email,
