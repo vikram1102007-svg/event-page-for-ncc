@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1f3a">
+  <title>Login &amp; Sign up | NCC Two-Day Event</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="scripts/config.js"></script>
+  <script src="scripts/utils.js"></script>
+  <script src="scripts/store.js" defer></script>
+  <script src="scripts/app.js" defer></script>
+</head>
+<body>
+  <div id="hdr"></div>
+  <main class="page">
+    <div class="container">
+      <h1>Participant &amp; Admin Login</h1>
+      <p class="sub">Sign in or create a participant account to register your team, track payments, and download certificates.</p>
+      <div id="setup"></div>
+      <div class="box">
+        <div class="tools">
+          <button class="button button-primary" id="t1" type="button">Login</button>
+          <button class="button button-quiet" style="color:var(--navy);border-color:var(--line)" id="t2" type="button">Create Account</button>
+          <button class="button button-quiet" style="color:var(--navy);border-color:var(--line)" id="t3" type="button">Reset Password</button>
+        </div>
+        <div class="msg" id="m" role="alert"></div>
+
+        <form class="form" id="f1">
+          <label>Email<input name="email" type="email" required autocomplete="email"></label>
+          <label>Password<input name="password" type="password" required autocomplete="current-password"></label>
+          <button class="button button-primary" type="submit">Log In</button>
+        </form>
+
+        <form class="form" id="f2" hidden>
+          <label>Full Name<input name="name" required maxlength="80"></label>
+          <div class="row2">
+            <label>Regimental / Roll No.<input name="regNo" required maxlength="30"></label>
+            <label>Year of Study<select name="year"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+          </div>
+          <div class="row2">
+            <label>Department<input name="dept" required maxlength="60"></label>
+            <label>Mobile Number<input name="phone" type="tel" required pattern="[0-9+\s-]{10,15}" title="10-digit phone number"></label>
+          </div>
+          <div class="row2">
+            <label>College Name<input name="college" required maxlength="120" placeholder="Your College"></label>
+            <label>NCC Unit<input name="nccUnit" maxlength="80" placeholder="e.g. 1 TN Bn NCC"></label>
+          </div>
+          <label>Email<input name="email" type="email" required autocomplete="email"></label>
+          <label>Password (min 6 characters)<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
+          <button class="button button-primary" type="submit">Create Participant Account</button>
+        </form>
+
+        <form class="form" id="f3" hidden>
+          <label>Registered Email<input name="email" type="email" required autocomplete="email"></label>
+          <button class="button button-primary" type="submit">Send Password Reset Email</button>
+        </form>
+
+        <form class="form" id="f4" hidden>
+          <label>New Password (min 6 characters)<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
+          <button class="button button-primary" type="submit">Update Password</button>
+        </form>
+
+        <p class="muted" style="font-size:13px;margin-top:16px">All new accounts receive the <strong>Participant</strong> role. Administrator privileges are assigned securely in the backend by an authorized administrator.</p>
+      </div>
+    </div>
+  </main>
+  <script>
+    window.addEventListener('DOMContentLoaded', async function () {
+      const $ = function (id) { return document.getElementById(id); };
+      const m = $('m');
+      $('setup').innerHTML = Store.setupBannerHtml();
+
+      const params = new URLSearchParams(window.location.search);
+      const next = NCCUtils.safeNextUrl(params.get('next'), 'my.html');
+      const mode = params.get('mode');
+
+      function showMsg(text, ok) {
+        m.textContent = text;
+        m.className = 'msg show ' + (ok ? 'good' : 'bad');
+      }
+
+      function tab(n) {
+        $('f1').hidden = n !== 1;
+        $('f2').hidden = n !== 2;
+        $('f3').hidden = n !== 3;
+        $('f4').hidden = n !== 4;
+        m.className = 'msg';
+      }
+
+      $('t1').onclick = function () { tab(1); };
+      $('t2').onclick = function () { tab(2); };
+      $('t3').onclick = function () { tab(3); };
+
+      if (mode === 'reset' || window.location.hash.includes('type=recovery')) {
+        tab(4);
+      }
+
+      const existing = await Store.user();
+      if (existing && mode !== 'reset') {
+        if (next === 'admin.html' && existing.role !== 'admin') {
+          showMsg('Access denied: administrator role required.', false);
+        } else {
+          window.location.href = (existing.role === 'admin' && next === 'my.html') ? 'admin.html' : next;
+          return;
+        }
+      }
+
+      $('f1').onsubmit = async function (e) {
+        e.preventDefault();
+        const d = new FormData(e.target);
+        const r = await Store.login(d.get('email'), d.get('password'));
+        if (r.ok) {
+          window.location.href = (r.user && r.user.role === 'admin' && next === 'my.html') ? 'admin.html' : next;
+        } else {
+          showMsg(r.msg, false);
+        }
+      };
+
+      $('f2').onsubmit = async function (e) {
+        e.preventDefault();
+        const r = await Store.signup(Object.fromEntries(new FormData(e.target)));
+        if (!r.ok) {
+          showMsg(r.msg, false);
+        } else if (r.needsEmailConfirmation) {
+          showMsg(r.msg, true);
+          e.target.reset();
+        } else {
+          window.location.href = next;
+        }
+      };
+
+      $('f3').onsubmit = async function (e) {
+        e.preventDefault();
+        const d = new FormData(e.target);
+        const r = await Store.resetPassword(d.get('email'));
+        showMsg(r.msg, r.ok);
+      };
+
+      $('f4').onsubmit = async function (e) {
+        e.preventDefault();
+        const d = new FormData(e.target);
+        const r = await Store.updatePassword(d.get('password'));
+        showMsg(r.msg, r.ok);
+        if (r.ok) setTimeout(function () { window.location.href = 'my.html'; }, 1000);
+      };
+    });
+  </script>
+</body>
+</html>

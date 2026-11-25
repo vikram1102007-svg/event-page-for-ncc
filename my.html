@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1f3a">
+  <title>Participant Dashboard | NCC Two-Day Event</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="scripts/config.js"></script>
+  <script src="scripts/utils.js"></script>
+  <script src="scripts/store.js" defer></script>
+  <script src="scripts/qr.js" defer></script>
+  <script src="scripts/cert.js" defer></script>
+  <script src="scripts/app.js" defer></script>
+</head>
+<body>
+  <div id="hdr"></div>
+  <main class="page">
+    <div class="container">
+      <div id="setup"></div>
+      <div class="split-head">
+        <div>
+          <h1>Participant Dashboard</h1>
+          <p class="sub" id="who">Loading your profile and team registrations...</p>
+        </div>
+        <div class="tools" style="margin-bottom:0">
+          <a class="button button-primary" href="register.html">+ Register a Team</a>
+          <a class="button button-quiet" style="color:var(--navy);border-color:var(--line)" href="events.html">View Events</a>
+        </div>
+      </div>
+
+      <div class="profile-card" id="profile-summary" hidden>
+        <div>
+          <strong id="p-name" style="font-size:17px;color:var(--navy)"></strong>
+          <div class="muted" id="p-meta" style="font-size:13.5px;margin-top:4px"></div>
+        </div>
+        <button class="mini primary" id="toggle-profile" type="button">Edit Profile</button>
+      </div>
+
+      <div class="box" id="profile-edit" hidden style="margin-bottom:24px">
+        <h3 style="margin-top:0">Participant Profile</h3>
+        <div class="msg" id="pm"></div>
+        <form class="form" id="pf">
+          <div class="row2">
+            <label>Full Name<input name="name" required maxlength="80"></label>
+            <label>Regimental / Roll No.<input name="regNo" maxlength="30"></label>
+          </div>
+          <div class="row3">
+            <label>Department<input name="dept" maxlength="60"></label>
+            <label>Year<select name="year"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+            <label>Phone<input name="phone" maxlength="15"></label>
+          </div>
+          <div class="row2">
+            <label>College Name<input name="college" maxlength="120"></label>
+            <label>NCC Unit<input name="nccUnit" maxlength="80"></label>
+          </div>
+          <button class="button button-primary" type="submit">Save Profile</button>
+        </form>
+      </div>
+
+      <div class="stats" id="my-stats"></div>
+      <div class="msg" id="act-msg" role="status"></div>
+
+      <h2>My Event &amp; Team Registrations</h2>
+      <div id="regs-wrap"><p class="muted">Loading registrations...</p></div>
+    </div>
+  </main>
+
+  <div class="qr-modal-backdrop" id="qr-modal" role="dialog" aria-modal="true" aria-labelledby="qr-title">
+    <div class="qr-modal">
+      <h3 id="qr-title" style="margin:0 0 6px;font-family:var(--display);color:var(--navy)">Team Check-In QR Pass</h3>
+      <p class="muted" id="qr-event" style="margin:0 0 8px;font-size:13px"></p>
+      <canvas id="qr-canvas" width="220" height="220"></canvas>
+      <div class="qr-code-text" id="qr-code-text"></div>
+      <p class="muted" id="qr-note" style="font-size:12px;margin:8px 0 16px">Present this QR code or Registration ID at the venue check-in desk.</p>
+      <button class="button button-primary" id="qr-close" type="button">Close</button>
+    </div>
+  </div>
+
+  <div class="qr-modal-backdrop" id="rcpt-modal" role="dialog" aria-modal="true" aria-labelledby="rcpt-title">
+    <div class="qr-modal" style="text-align:left">
+      <h3 id="rcpt-title" style="margin:0 0 8px;font-family:var(--display);color:var(--navy)">Payment Details &amp; Reference</h3>
+      <div id="rcpt-banner" class="msg show" style="margin:0 0 12px"></div>
+      <div id="rcpt-body" style="font-size:14px;line-height:1.75"></div>
+      <div style="margin-top:16px;text-align:right"><button class="button button-primary" id="rcpt-close" type="button">Close</button></div>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', async function () {
+      const $ = function (id) { return document.getElementById(id); };
+      const E = Store.esc;
+      $('setup').innerHTML = Store.setupBannerHtml();
+
+      const u = await Store.user();
+      if (!u) {
+        if (Store.isConfigured()) {
+          window.location.href = 'login.html?next=my.html';
+        } else {
+          $('who').textContent = 'Configure Supabase first to view your dashboard.';
+          $('regs-wrap').innerHTML = '<p class="muted">Supabase is not configured yet.</p>';
+        }
+        return;
+      }
+
+      function renderProfile(user) {
+        $('who').textContent = 'Welcome, ' + user.name + ' (' + user.email + ')';
+        $('profile-summary').hidden = false;
+        $('p-name').textContent = user.name + (user.regNo ? ' · ' + user.regNo : '');
+        $('p-meta').textContent = [
+          user.college ? 'College: ' + user.college : 'College: Not set',
+          user.nccUnit ? 'NCC Unit: ' + user.nccUnit : 'NCC Unit: Not set',
+          user.dept ? 'Dept: ' + user.dept : '',
+          user.year ? 'Year ' + user.year : '',
+          user.phone ? 'Phone: ' + user.phone : ''
+        ].filter(Boolean).join('  |  ');
+        const pf = $('pf');
+        pf.name.value = user.name || '';
+        pf.regNo.value = user.regNo || '';
+        pf.dept.value = user.dept || '';
+        pf.year.value = user.year || '1';
+        pf.phone.value = user.phone || '';
+        pf.college.value = user.college || '';
+        pf.nccUnit.value = user.nccUnit || '';
+      }
+
+      renderProfile(u);
+
+      $('toggle-profile').onclick = function () {
+        $('profile-edit').hidden = !$('profile-edit').hidden;
+      };
+
+      $('pf').onsubmit = async function (e) {
+        e.preventDefault();
+        const r = await Store.updateProfile(Object.fromEntries(new FormData(e.target)));
+        const pm = $('pm');
+        pm.textContent = r.msg;
+        pm.className = 'msg show ' + (r.ok ? 'good' : 'bad');
+        if (r.ok) {
+          const fresh = await Store.user(true);
+          renderProfile(fresh);
+        }
+      };
+
+      function statusPill(status) {
+        const map = {
+          approved: 'ok',
+          paid: 'ok',
+          issued: 'ok',
+          pending: 'warn',
+          rejected: 'danger',
+          failed: 'danger',
+          revoked: 'danger',
+          cancelled: 'danger',
+          refunded: 'gold'
+        };
+        const label = String(status || 'pending').replace(/^./, function (c) { return c.toUpperCase(); });
+        return '<span class="pill ' + (map[status] || '') + '">' + E(label) + '</span>';
+      }
+
+      let regs = [];
+      async function loadRegs() {
+        regs = await Store.myRegs();
+        const paidCount = regs.filter(function (r) { return r.payment && r.payment.status === 'paid'; }).length;
+        const pendingCount = regs.filter(function (r) { return !r.payment || r.payment.status === 'pending'; }).length;
+        const issuedCount = regs.reduce(function (acc, r) {
+          return acc + r.certificates.filter(function (c) { return c.status === 'issued'; }).length;
+        }, 0);
+
+        $('my-stats').innerHTML =
+          '<div class="stat"><b>' + regs.length + '</b>Registered Events</div>' +
+          '<div class="stat"><b>' + paidCount + '</b>Paid Events</div>' +
+          '<div class="stat"><b>' + pendingCount + '</b>Pending Payments</div>' +
+          '<div class="stat"><b>' + issuedCount + '</b>Certificates Issued</div>';
+
+        if (!regs.length) {
+          $('regs-wrap').innerHTML = '<div class="box"><p style="margin-top:0">You have not registered a team yet.</p><a class="button button-primary" href="register.html">Register a Team</a></div>';
+          return;
+        }
+
+        $('regs-wrap').innerHTML = regs.map(function (r) {
+          const pay = r.payment || { amount: r.eventFee, status: 'pending', mode: 'demo', reference: '' };
+          const canDemoSubmit = pay.status === 'pending' && !pay.reference;
+
+          const membersRows = r.members.map(function (m) {
+            const cert = r.certByMember[m.id];
+            let certHtml = '<span class="muted">After attendance</span>';
+            if (cert) {
+              certHtml = statusPill(cert.status);
+              if (cert.status === 'issued') {
+                certHtml += ' <button class="mini ok" data-dl-cert="' + E(r.id) + '" data-member="' + E(m.id) + '" type="button">Download PDF</button>';
+              } else if (cert.status === 'rejected' && cert.rejectionReason) {
+                certHtml += '<br><small class="muted">' + E(cert.rejectionReason) + '</small>';
+              }
+            } else if (r.present) {
+              certHtml = '<button class="mini primary" data-req-cert="' + E(r.id) + '" data-member="' + E(m.id) + '" type="button">Request Certificate</button>';
+            }
+
+            return '<tr>' +
+              '<td><strong>' + E(m.name) + '</strong></td>' +
+              '<td>' + E(m.roleInTeam) + '</td>' +
+              '<td>' + E(m.regNo || '—') + '</td>' +
+              '<td>' + E([m.dept, m.year ? 'Yr ' + m.year : ''].filter(Boolean).join(' / ') || '—') + '</td>' +
+              '<td>' + E(m.phone || '—') + '</td>' +
+              '<td>' + certHtml + '</td>' +
+            '</tr>';
+          }).join('');
+
+          return '<article class="reg-card">' +
+            '<div class="reg-card-head">' +
+              '<div>' +
+                '<div class="pill-row" style="margin-bottom:6px">' +
+                  '<span class="pill navy">' + E(r.eventTitle) + ' — ' + E(Store.formatFee(pay.amount)) + '</span>' +
+                  '<span class="pill">Reg ID: ' + E(r.registrationCode) + '</span>' +
+                '</div>' +
+                '<h3 style="margin:0;font-family:var(--display);color:var(--navy)">Team: ' + E(r.teamName) + '</h3>' +
+                '<small class="muted">' + E(r.collegeName) + (r.nccUnit ? ' · ' + E(r.nccUnit) : '') + '</small>' +
+              '</div>' +
+              '<div class="pill-row">' +
+                '<span>Registration: ' + statusPill(r.status) + '</span>' +
+                '<span>Payment: ' + statusPill(pay.status) + '</span>' +
+                '<span>Attendance: <span class="pill ' + (r.present ? 'ok' : '') + '">' + (r.present ? 'Present' : 'Not Checked In') + '</span></span>' +
+              '</div>' +
+            '</div>' +
+
+            '<div class="reg-grid">' +
+              '<div class="reg-kv"><strong>Event Schedule</strong>Day ' + E(r.eventDay) + ' · ' + E(r.eventDate) + ' · ' + E(r.eventTime) + '</div>' +
+              '<div class="reg-kv"><strong>Venue</strong>' + E(r.eventVenue) + '</div>' +
+              '<div class="reg-kv"><strong>Team Leader</strong>' + E(r.leaderName) + ' (' + E(r.leaderPhone) + ')</div>' +
+              '<div class="reg-kv"><strong>Payment Amount &amp; Reference</strong>' + E(Store.formatFee(pay.amount)) + ' · ' + E(pay.reference || 'Not submitted yet') + '</div>' +
+            '</div>' +
+
+            '<div class="tools" style="margin-bottom:14px">' +
+              '<button class="mini primary" data-qr="' + E(r.id) + '" type="button">View QR Pass</button>' +
+              '<button class="mini" data-rcpt="' + E(r.id) + '" type="button">Payment Receipt / Ref</button>' +
+              (canDemoSubmit ? '<button class="mini ok" data-demo-pay="' + E(r.id) + '" type="button">Submit Demo Payment (' + E(Store.formatFee(pay.amount)) + ')</button>' : '') +
+            '</div>' +
+
+            '<div class="tbl" style="margin-bottom:0">' +
+              '<table><thead><tr><th>Participant</th><th>Role</th><th>Reg. No.</th><th>Dept / Year</th><th>Phone</th><th>Certificate Status</th></tr></thead>' +
+              '<tbody>' + membersRows + '</tbody></table>' +
+            '</div>' +
+          '</article>';
+        }).join('');
+      }
+
+      document.body.addEventListener('click', async function (e) {
+        const t = e.target;
+        const qrId = t.getAttribute('data-qr');
+        const rcptId = t.getAttribute('data-rcpt');
+        const payId = t.getAttribute('data-demo-pay');
+        const reqCertReg = t.getAttribute('data-req-cert');
+        const dlCertReg = t.getAttribute('data-dl-cert');
+        const memberId = t.getAttribute('data-member');
+
+        if (qrId) {
+          const r = regs.find(function (x) { return x.id === qrId; });
+          if (!r) return;
+          $('qr-event').textContent = r.eventTitle + ' · Team: ' + r.teamName;
+          $('qr-code-text').textContent = r.registrationCode;
+          $('qr-modal').classList.add('open');
+          const ok = await NCCQr.renderQrToCanvas($('qr-canvas'), NCCUtils.buildQrPayload(r), 220);
+          if (!ok) {
+            $('qr-note').textContent = 'QR renderer unavailable offline. Show your Registration ID above at check-in.';
+          }
+        }
+
+        if (rcptId) {
+          const r = regs.find(function (x) { return x.id === rcptId; });
+          if (!r) return;
+          const pay = r.payment || {};
+          $('rcpt-banner').innerHTML = pay.mode === 'demo'
+            ? '<strong>DEMO PAYMENT MODE:</strong> Simulated payment tracking only. No real money was transferred. Payment status is verified by an administrator.'
+            : '<strong>PAYMENT RECORD:</strong> Official transaction reference.';
+          $('rcpt-body').innerHTML =
+            '<div><strong>Event:</strong> ' + E(r.eventTitle) + '</div>' +
+            '<div><strong>Amount:</strong> ' + E(Store.formatFee(pay.amount)) + '</div>' +
+            '<div><strong>Payment Status:</strong> ' + E(String(pay.status || 'pending').toUpperCase()) + '</div>' +
+            '<div><strong>Payment Reference:</strong> ' + E(pay.reference || 'Not submitted yet') + '</div>' +
+            '<div><strong>Registration ID:</strong> ' + E(r.registrationCode) + '</div>' +
+            '<div><strong>Team:</strong> ' + E(r.teamName) + ' (' + E(r.collegeName) + ')</div>';
+          $('rcpt-modal').classList.add('open');
+        }
+
+        if (payId) {
+          const res = await Store.submitDemoPayment(payId);
+          const m = $('act-msg');
+          m.textContent = res.msg;
+          m.className = 'msg show ' + (res.ok ? 'good' : 'bad');
+          if (res.ok) await loadRegs();
+        }
+
+        if (reqCertReg && memberId) {
+          const res = await Store.requestCertificate(reqCertReg, memberId);
+          const m = $('act-msg');
+          m.textContent = res.msg;
+          m.className = 'msg show ' + (res.ok ? 'good' : 'bad');
+          if (res.ok) await loadRegs();
+        }
+
+        if (dlCertReg && memberId) {
+          const r = regs.find(function (x) { return x.id === dlCertReg; });
+          const cert = r && r.certByMember && r.certByMember[memberId];
+          if (!cert || cert.status !== 'issued') return;
+          const out = NCCCert.generateCertificatePdf({
+            certificateNumber: cert.certificateNumber,
+            participantName: cert.participantName,
+            teamName: cert.teamName || r.teamName,
+            collegeName: cert.collegeName || r.collegeName,
+            eventTitle: cert.eventTitle || r.eventTitle,
+            eventDate: cert.eventDate || r.eventDate,
+            issuedAt: cert.issuedAt,
+            registrationCode: r.registrationCode
+          }, Store.config());
+          if (!out.ok) {
+            const m = $('act-msg');
+            m.textContent = out.msg;
+            m.className = 'msg show bad';
+          }
+        }
+      });
+
+      $('qr-close').onclick = function () { $('qr-modal').classList.remove('open'); };
+      $('rcpt-close').onclick = function () { $('rcpt-modal').classList.remove('open'); };
+
+      await loadRegs();
+    });
+  </script>
+</body>
+</html>

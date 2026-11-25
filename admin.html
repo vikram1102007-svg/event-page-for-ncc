@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1f3a">
+  <title>Admin Dashboard | NCC Two-Day Event</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="scripts/config.js"></script>
+  <script src="scripts/utils.js"></script>
+  <script src="scripts/store.js" defer></script>
+  <script src="scripts/qr.js" defer></script>
+  <script src="scripts/cert.js" defer></script>
+  <script src="scripts/app.js" defer></script>
+</head>
+<body>
+  <div id="hdr"></div>
+  <main class="page">
+    <div class="container">
+      <div class="split-head">
+        <div>
+          <h1>Admin Dashboard</h1>
+          <p class="sub">Manage events, teams, participants, payments, attendance, certificates, and settings.</p>
+        </div>
+      </div>
+      <div id="setup"></div>
+      <div class="msg" id="admin-msg" role="status"></div>
+
+      <div class="admin-shell">
+        <aside class="admin-nav" aria-label="Admin sections">
+          <button class="active" data-tab="dashboard" type="button">Dashboard</button>
+          <button data-tab="events" type="button">Events</button>
+          <button data-tab="teams" type="button">Teams</button>
+          <button data-tab="participants" type="button">Participants</button>
+          <button data-tab="payments" type="button">Payments</button>
+          <button data-tab="attendance" type="button">Attendance</button>
+          <button data-tab="certificates" type="button">Certificates</button>
+          <button data-tab="settings" type="button">Settings</button>
+        </aside>
+
+        <div>
+          <!-- 1. DASHBOARD -->
+          <section class="admin-panel" id="panel-dashboard">
+            <h2 style="margin-top:0">Event Overview</h2>
+            <div class="stats" id="overview-stats"></div>
+            <h3>Recent Team Registrations</h3>
+            <div class="tbl">
+              <table>
+                <thead><tr><th>Reg. ID</th><th>Team</th><th>College</th><th>Event</th><th>Reg. Status</th><th>Payment</th></tr></thead>
+                <tbody id="recent-regs"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 2. EVENTS -->
+          <section class="admin-panel" id="panel-events" hidden>
+            <h2 style="margin-top:0">Manage Events</h2>
+            <div class="tbl">
+              <table>
+                <thead><tr><th>Event</th><th>Schedule &amp; Venue</th><th>Team Size</th><th>Fee</th><th>Team Slots</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="ev-rows"></tbody>
+              </table>
+            </div>
+
+            <div class="box box-wide" style="max-width:820px">
+              <h3 id="ft" style="margin-top:0">Create / Edit Event</h3>
+              <form class="form" id="ev-form">
+                <input type="hidden" name="id">
+                <div class="row2">
+                  <label>Event Name<input name="title" required maxlength="100" placeholder="e.g. Firing / Drill"></label>
+                  <label>Registration Fee (₹)<input name="fee" type="number" min="0" value="400" required></label>
+                </div>
+                <div class="row3">
+                  <label>Day<select name="day"><option value="1">Day 1</option><option value="2">Day 2</option></select></label>
+                  <label>Category<select name="type"><option value="Team">Team</option><option value="Individual">Individual</option></select></label>
+                  <label>Available Team Slots<input name="seats" type="number" min="1" value="20" required></label>
+                </div>
+                <div class="row2">
+                  <label>Min Team Size<input name="minTeamSize" type="number" min="1" value="2" required></label>
+                  <label>Max Team Size<input name="maxTeamSize" type="number" min="1" value="8" required></label>
+                </div>
+                <div class="row3">
+                  <label>Event Date<input name="date" placeholder="e.g. 12 Dec 2026"></label>
+                  <label>Event Time<input name="time" placeholder="e.g. 09:30 AM - 01:00 PM"></label>
+                  <label>Registration Deadline<input name="deadline" placeholder="e.g. 10 Dec 2026"></label>
+                </div>
+                <label>Venue<input name="venue" placeholder="Parade Ground / Range"></label>
+                <label>Event Description<textarea name="desc" rows="2"></textarea></label>
+                <label>Eligibility Criteria<textarea name="criteria" rows="2"></textarea></label>
+                <label>Rules &amp; Instructions<textarea name="rules" rows="2"></textarea></label>
+                <div class="tools" style="margin-bottom:0">
+                  <label class="inline-check"><input name="registrationOpen" type="checkbox" checked> Registration Open</label>
+                  <label class="inline-check"><input name="isSample" type="checkbox"> Label as Sample Event</label>
+                </div>
+                <div class="tools" style="margin-bottom:0">
+                  <button class="button button-primary" type="submit">Save Event</button>
+                  <button class="button button-quiet" style="color:var(--navy);border-color:var(--line)" id="cancel-edit" type="button">Reset Form</button>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <!-- 3. TEAMS -->
+          <section class="admin-panel" id="panel-teams" hidden>
+            <h2 style="margin-top:0">Registered Teams</h2>
+            <div class="tools">
+              <input id="tq" type="search" placeholder="Search team, college, leader, reg ID">
+              <select id="te"><option value="">All events</option></select>
+              <select id="ts">
+                <option value="">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+              <button class="button button-primary" id="exp-teams" type="button">Export Teams CSV</button>
+            </div>
+            <div class="tbl">
+              <table>
+                <thead><tr><th>Reg. ID</th><th>Team &amp; College</th><th>Leader &amp; Contact</th><th>Event</th><th>Members</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="team-rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 4. PARTICIPANTS -->
+          <section class="admin-panel" id="panel-participants" hidden>
+            <h2 style="margin-top:0">All Participants (Team Leaders &amp; Members)</h2>
+            <div class="tools">
+              <input id="pq" type="search" placeholder="Search participant, reg no, team, college">
+              <select id="pe"><option value="">All events</option></select>
+              <button class="button button-primary" id="exp-parts" type="button">Export Participants CSV</button>
+            </div>
+            <div class="tbl">
+              <table>
+                <thead><tr><th>Participant</th><th>Role</th><th>Reg. No.</th><th>Team &amp; College</th><th>Event</th><th>Phone / Dept</th><th>Certificate</th></tr></thead>
+                <tbody id="part-rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 5. PAYMENTS -->
+          <section class="admin-panel" id="panel-payments" hidden>
+            <h2 style="margin-top:0">Payment Management</h2>
+            <div class="msg show" style="margin-top:0">
+              <strong>Demo Payment Mode Active:</strong> Participants cannot verify their own payments. Review each registration's payment reference and update its verified status here.
+            </div>
+            <div class="tools">
+              <select id="pay-ev"><option value="">All events</option></select>
+              <select id="pay-st">
+                <option value="">All payment statuses</option>
+                <option value="pending">Pending</option>
+                <option value="paid">Paid</option>
+                <option value="failed">Failed</option>
+                <option value="refunded">Refunded</option>
+              </select>
+            </div>
+            <div class="tbl">
+              <table>
+                <thead><tr><th>Reg. ID</th><th>Team &amp; Leader</th><th>Event</th><th>Amount</th><th>Mode &amp; Reference</th><th>Status</th><th>Admin Verification</th></tr></thead>
+                <tbody id="pay-rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 6. ATTENDANCE -->
+          <section class="admin-panel" id="panel-attendance" hidden>
+            <h2 style="margin-top:0">Attendance &amp; QR Check-In</h2>
+            <div class="scanner-wrap">
+              <div class="scanner-box">
+                <h3 style="margin-top:0">QR Pass Scanner</h3>
+                <p class="muted" style="font-size:13px">Scan a team's QR pass. Duplicate check-ins are blocked automatically.</p>
+                <div class="tools" style="margin-bottom:8px">
+                  <button class="button button-primary" id="scan-start" type="button">Start Camera</button>
+                  <button class="button button-quiet" style="color:var(--navy);border-color:var(--line)" id="scan-stop" type="button">Stop Camera</button>
+                </div>
+                <div id="qr-reader"></div>
+              </div>
+              <div class="scanner-box">
+                <h3 style="margin-top:0">Manual Registration ID Check-In</h3>
+                <form class="form" id="manual-checkin">
+                  <label>Registration ID or QR Token<input name="code" required placeholder="NCC-..."></label>
+                  <button class="button button-primary" type="submit">Verify &amp; Check In</button>
+                </form>
+                <div class="msg" id="checkin-msg" role="status"></div>
+              </div>
+            </div>
+            <div class="tbl">
+              <table>
+                <thead><tr><th>Reg. ID</th><th>Team &amp; College</th><th>Event</th><th>Method</th><th>Checked In At</th><th>Present</th></tr></thead>
+                <tbody id="att-rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 7. CERTIFICATES -->
+          <section class="admin-panel" id="panel-certificates" hidden>
+            <h2 style="margin-top:0">Certificate Approval &amp; Issuance</h2>
+            <div class="tools">
+              <select id="cert-ev"><option value="">All events</option></select>
+              <select id="cert-elig">
+                <option value="eligible">Eligible (Checked-In Present) Only</option>
+                <option value="all">All Participants</option>
+              </select>
+              <button class="button button-primary" id="bulk-issue" type="button">Generate / Issue Selected</button>
+            </div>
+            <div class="tbl">
+              <table>
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="cert-all" aria-label="Select all eligible"></th>
+                    <th>Participant</th>
+                    <th>Team &amp; College</th>
+                    <th>Event</th>
+                    <th>Attendance</th>
+                    <th>Cert. Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="cert-rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 8. SETTINGS -->
+          <section class="admin-panel" id="panel-settings" hidden>
+            <h2 style="margin-top:0">Portal Settings &amp; Admin Roles</h2>
+            <div class="scanner-wrap">
+              <div class="scanner-box">
+                <h3 style="margin-top:0">Assign User Role</h3>
+                <p class="muted" style="font-size:13px">Promote an existing registered user to Admin or revert to Participant.</p>
+                <form class="form" id="role-form">
+                  <label>User Email<input name="email" type="email" required placeholder="user@college.edu"></label>
+                  <label>Role<select name="role"><option value="admin">Admin</option><option value="participant">Participant</option></select></label>
+                  <button class="button button-primary" type="submit">Update Role</button>
+                </form>
+              </div>
+              <div class="scanner-box">
+                <h3 style="margin-top:0">Registered Accounts</h3>
+                <div id="user-roles-list" style="max-height:220px;overflow-y:auto;font-size:13px"></div>
+              </div>
+            </div>
+
+            <div class="scanner-wrap">
+              <div class="scanner-box">
+                <h3 style="margin-top:0">Publish Announcement</h3>
+                <form class="form" id="ann-form">
+                  <label>Title<input name="title" required maxlength="120"></label>
+                  <label>Message<textarea name="body" rows="2" required></textarea></label>
+                  <button class="button button-primary" type="submit">Publish Announcement</button>
+                </form>
+                <div id="ann-list" class="announcement-list"></div>
+              </div>
+
+              <div class="scanner-box">
+                <h3 style="margin-top:0">Two-Day Schedule Editor</h3>
+                <form class="form" id="sched-form">
+                  <div class="row3">
+                    <label>Day<select name="day"><option value="1">Day 1</option><option value="2">Day 2</option></select></label>
+                    <label>Time<input name="time_label" required placeholder="09:30 AM"></label>
+                    <label>Order<input name="sort_order" type="number" min="1" value="1"></label>
+                  </div>
+                  <label>Title<input name="title" required maxlength="100"></label>
+                  <label>Details<input name="subtitle" maxlength="160"></label>
+                  <button class="button button-primary" type="submit">Add Schedule Item</button>
+                </form>
+                <div id="sched-list" class="announcement-list"></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Team Members Modal -->
+  <div class="qr-modal-backdrop" id="team-modal" role="dialog" aria-modal="true" aria-labelledby="tm-title">
+    <div class="qr-modal" style="text-align:left;max-width:640px">
+      <h3 id="tm-title" style="margin:0 0 8px;font-family:var(--display);color:var(--navy)">Team Details</h3>
+      <div id="tm-body" style="font-size:14px"></div>
+      <div style="margin-top:16px;text-align:right"><button class="button button-primary" id="tm-close" type="button">Close</button></div>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', async function () {
+      const $ = function (id) { return document.getElementById(id); };
+      const E = Store.esc;
+      $('setup').innerHTML = Store.setupBannerHtml();
+
+      if (!Store.isConfigured()) return;
+
+      const u = await Store.user();
+      if (!u || u.role !== 'admin') {
+        window.location.href = 'login.html?next=admin.html';
+        return;
+      }
+
+      // Sidebar tab navigation
+      document.querySelectorAll('.admin-nav button').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          document.querySelectorAll('.admin-nav button').forEach(function (b) { b.classList.remove('active'); });
+          document.querySelectorAll('.admin-panel').forEach(function (p) { p.hidden = true; });
+          btn.classList.add('active');
+          const panel = $('panel-' + btn.getAttribute('data-tab'));
+          if (panel) panel.hidden = false;
+        });
+      });
+
+      let events = [];
+      let regs = [];
+      let profiles = [];
+      let lastScanText = '';
+      let lastScanTime = 0;
+
+      function notify(text, ok) {
+        const box = $('admin-msg');
+        box.textContent = text;
+        box.className = 'msg show ' + (ok ? 'good' : 'bad');
+      }
+
+      function pill(status) {
+        const cls = {
+          approved: 'ok', paid: 'ok', issued: 'ok',
+          pending: 'warn', rejected: 'danger', failed: 'danger', revoked: 'danger', cancelled: 'danger', refunded: 'gold'
+        }[status] || '';
+        return '<span class="pill ' + cls + '">' + E(status || 'pending') + '</span>';
+      }
+
+      function populateEventFilters() {
+        const opts = '<option value="">All events</option>' + events.map(function (e) {
+          return '<option value="' + E(e.id) + '">' + E(e.title) + '</option>';
+        }).join('');
+        ['te', 'pe', 'pay-ev', 'cert-ev'].forEach(function (id) {
+          const el = $(id);
+          const cur = el.value;
+          el.innerHTML = opts;
+          el.value = cur;
+        });
+      }
+
+      function flattenParticipants() {
+        const rows = [];
+        regs.forEach(function (r) {
+          r.members.forEach(function (m) {
+            rows.push({
+              reg: r,
+              member: m,
+              cert: r.certByMember[m.id] || null
+            });
+          });
+        });
+        return rows;
+      }
+
+      async function draw() {
+        const [evList, regList, profList, anns, sched] = await Promise.all([
+          Store.events({ includeInactive: true }),
+          Store.adminRegs(),
+          Store.adminProfiles(),
+          Store.announcements(true),
+          Store.scheduleItems()
+        ]);
+        events = evList;
+        regs = regList;
+        profiles = profList;
+
+        const allMembers = flattenParticipants();
+        const firingRegs = regs.filter(function (r) { return r.eventTitle.toLowerCase().includes('firing'); }).length;
+        const drillRegs = regs.filter(function (r) { return r.eventTitle.toLowerCase().includes('drill'); }).length;
+        const paidRegs = regs.filter(function (r) { return r.payment && r.payment.status === 'paid'; }).length;
+        const pendingPays = regs.filter(function (r) { return !r.payment || r.payment.status === 'pending'; }).length;
+        const certsApproved = allMembers.filter(function (x) { return x.cert && (x.cert.status === 'approved' || x.cert.status === 'issued'); }).length;
+
+        $('overview-stats').innerHTML =
+          '<div class="stat"><b>' + regs.length + '</b>Total Teams</div>' +
+          '<div class="stat"><b>' + allMembers.length + '</b>Total Participants</div>' +
+          '<div class="stat"><b>' + firingRegs + '</b>Firing Registrations</div>' +
+          '<div class="stat"><b>' + drillRegs + '</b>Drill Registrations</div>' +
+          '<div class="stat"><b>' + paidRegs + '</b>Paid Registrations</div>' +
+          '<div class="stat"><b>' + pendingPays + '</b>Pending Payments</div>' +
+          '<div class="stat"><b>' + certsApproved + '</b>Certificates Approved</div>';
+
+        $('recent-regs').innerHTML = regs.slice(0, 8).map(function (r) {
+          return '<tr><td><strong>' + E(r.registrationCode) + '</strong></td><td>' + E(r.teamName) + '</td><td>' + E(r.collegeName) + '</td><td>' + E(r.eventTitle) + '</td><td>' + pill(r.status) + '</td><td>' + pill(r.payment.status) + '</td></tr>';
+        }).join('') || '<tr><td colspan="6" class="muted">No team registrations yet.</td></tr>';
+
+        $('ev-rows').innerHTML = events.map(function (e) {
+          return '<tr>' +
+            '<td><strong>' + E(e.title) + '</strong>' + (e.isSample ? ' <span class="pill gold">Sample</span>' : '') + '</td>' +
+            '<td>Day ' + e.day + ' · ' + E(e.date) + ' · ' + E(e.time) + '<br><small class="muted">' + E(e.venue) + '</small></td>' +
+            '<td>' + e.minTeamSize + '–' + e.maxTeamSize + '</td>' +
+            '<td>' + E(Store.formatFee(e.fee)) + '</td>' +
+            '<td>' + e.taken + ' / ' + e.seats + '</td>' +
+            '<td><span class="pill ' + (e.registrationOpen ? 'ok' : 'danger') + '">' + (e.registrationOpen ? 'Open' : 'Closed') + '</span></td>' +
+            '<td><button class="mini" data-edit-ev="' + E(e.id) + '" type="button">Edit</button> <button class="mini danger" data-del-ev="' + E(e.id) + '" type="button">Delete</button></td>' +
+          '</tr>';
+        }).join('') || '<tr><td colspan="7" class="muted">No events found.</td></tr>';
+
+        populateEventFilters();
+        renderTeams();
+        renderParticipants();
+        renderPayments();
+        renderAttendance();
+        renderCertificates();
+
+        $('user-roles-list').innerHTML = profiles.map(function (p) {
+          return '<div style="padding:6px 0;border-bottom:1px solid var(--line)"><strong>' + E(p.name) + '</strong> (' + E(p.email) + ') — ' + pill(p.role) + '</div>';
+        }).join('') || '<p class="muted">No profiles yet.</p>';
+
+        $('ann-list').innerHTML = anns.map(function (a) {
+          return '<div class="announcement-item"><strong>' + E(a.title) + '</strong><p>' + E(a.body) + '</p><button class="mini danger" style="margin-top:8px" data-del-ann="' + E(a.id) + '" type="button">Delete</button></div>';
+        }).join('');
+
+        $('sched-list').innerHTML = sched.map(function (s) {
+          return '<div class="announcement-item"><strong>Day ' + s.day + ' · ' + E(s.time_label) + ' — ' + E(s.title) + '</strong><p>' + E(s.subtitle) + '</p><button class="mini danger" style="margin-top:8px" data-del-sched="' + E(s.id) + '" type="button">Delete</button></div>';
+        }).join('');
+      }
+
+      function filteredTeams() {
+        const q = $('tq').value.trim().toLowerCase();
+        const ev = $('te').value;
+        const st = $('ts').value;
+        return regs.filter(function (r) {
+          if (ev && r.eventId !== ev) return false;
+          if (st && r.status !== st) return false;
+          if (q) {
+            const hay = [r.registrationCode, r.teamName, r.collegeName, r.leaderName, r.leaderEmail, r.leaderPhone, r.nccUnit].join(' ').toLowerCase();
+            if (!hay.includes(q)) return false;
+          }
+          return true;
+        });
+      }
+
+      function renderTeams() {
+        const list = filteredTeams();
+        $('team-rows').innerHTML = list.map(function (r) {
+          return '<tr>' +
+            '<td><strong>' + E(r.registrationCode) + '</strong></td>' +
+            '<td><strong>' + E(r.teamName) + '</strong><br><small class="muted">' + E(r.collegeName) + (r.nccUnit ? ' · ' + E(r.nccUnit) : '') + '</small></td>' +
+            '<td>' + E(r.leaderName) + '<br><small class="muted">' + E(r.leaderPhone) + ' · ' + E(r.leaderEmail) + '</small></td>' +
+            '<td>' + E(r.eventTitle) + '<br><small class="muted">' + E(Store.formatFee(r.eventFee)) + '</small></td>' +
+            '<td>' + r.members.length + ' <button class="mini" data-view-team="' + E(r.id) + '" type="button">View Members</button></td>' +
+            '<td>' + pill(r.status) + '</td>' +
+            '<td>' +
+              '<button class="mini ok" data-reg-st="approved" data-reg-id="' + E(r.id) + '" type="button">Approve</button> ' +
+              '<button class="mini danger" data-reg-st="rejected" data-reg-id="' + E(r.id) + '" type="button">Reject</button>' +
+            '</td>' +
+          '</tr>';
+        }).join('') || '<tr><td colspan="7" class="muted">No matching teams.</td></tr>';
+      }
+
+      function filteredParticipants() {
+        const q = $('pq').value.trim().toLowerCase();
+        const ev = $('pe').value;
+        return flattenParticipants().filter(function (item) {
+          if (ev && item.reg.eventId !== ev) return false;
+          if (q) {
+            const hay = [item.member.name, item.member.regNo, item.reg.teamName, item.reg.collegeName, item.reg.eventTitle].join(' ').toLowerCase();
+            if (!hay.includes(q)) return false;
+          }
+          return true;
+        });
+      }
+
+      function renderParticipants() {
+        const list = filteredParticipants();
+        $('part-rows').innerHTML = list.map(function (item) {
+          const m = item.member;
+          const r = item.reg;
+          return '<tr>' +
+            '<td><strong>' + E(m.name) + '</strong></td>' +
+            '<td>' + E(m.roleInTeam) + '</td>' +
+            '<td>' + E(m.regNo || '—') + '</td>' +
+            '<td>' + E(r.teamName) + '<br><small class="muted">' + E(r.collegeName) + '</small></td>' +
+            '<td>' + E(r.eventTitle) + '</td>' +
+            '<td>' + E(m.phone || r.leaderPhone) + '<br><small class="muted">' + E(m.dept || '—') + '</small></td>' +
+            '<td>' + (item.cert ? pill(item.cert.status) : '<span class="muted">None</span>') + '</td>' +
+          '</tr>';
+        }).join('') || '<tr><td colspan="7" class="muted">No participants found.</td></tr>';
+      }
+
+      function renderPayments() {
+        const ev = $('pay-ev').value;
+        const st = $('pay-st').value;
+        const list = regs.filter(function (r) {
+          if (ev && r.eventId !== ev) return false;
+          if (st && r.payment.status !== st) return false;
+          return true;
+        });
+        $('pay-rows').innerHTML = list.map(function (r) {
+          const p = r.payment;
+          return '<tr>' +
+            '<td><strong>' + E(r.registrationCode) + '</strong></td>' +
+            '<td>' + E(r.teamName) + '<br><small class="muted">' + E(r.leaderName) + '</small></td>' +
+            '<td>' + E(r.eventTitle) + '</td>' +
+            '<td><strong>' + E(Store.formatFee(p.amount)) + '</strong></td>' +
+            '<td>' + E(p.mode.toUpperCase()) + '<br><small class="muted">' + E(p.reference || 'No ref yet') + '</small></td>' +
+            '<td>' + pill(p.status) + '</td>' +
+            '<td>' +
+              '<button class="mini ok" data-pay-act="paid" data-pay-id="' + E(p.id) + '" type="button">Mark Paid</button> ' +
+              '<button class="mini" data-pay-act="pending" data-pay-id="' + E(p.id) + '" type="button">Pending</button> ' +
+              '<button class="mini danger" data-pay-act="failed" data-pay-id="' + E(p.id) + '" type="button">Failed</button> ' +
+              '<button class="mini" data-pay-act="refunded" data-pay-id="' + E(p.id) + '" type="button">Refunded</button>' +
+            '</td>' +
+          '</tr>';
+        }).join('') || '<tr><td colspan="7" class="muted">No payment records found.</td></tr>';
+      }
+
+      function renderAttendance() {
+        $('att-rows').innerHTML = regs.map(function (r) {
+          return '<tr>' +
+            '<td><strong>' + E(r.registrationCode) + '</strong></td>' +
+            '<td>' + E(r.teamName) + '<br><small class="muted">' + E(r.collegeName) + '</small></td>' +
+            '<td>' + E(r.eventTitle) + '</td>' +
+            '<td>' + E(r.checkInMethod || '—') + '</td>' +
+            '<td>' + (r.checkedInAt ? E(new Date(r.checkedInAt).toLocaleString()) : '—') + '</td>' +
+            '<td><input type="checkbox" data-present="' + E(r.id) + '" ' + (r.present ? 'checked' : '') + ' aria-label="Mark present"></td>' +
+          '</tr>';
+        }).join('') || '<tr><td colspan="6" class="muted">No teams to mark attendance.</td></tr>';
+      }
+
+      function renderCertificates() {
+        const ev = $('cert-ev').value;
+        const elig = $('cert-elig').value;
+        const list = flattenParticipants().filter(function (item) {
+          if (ev && item.reg.eventId !== ev) return false;
+          if (elig === 'eligible' && !item.reg.present) return false;
+          return true;
+        });
+
+        $('cert-rows').innerHTML = list.map(function (item) {
+          const r = item.reg;
+          const m = item.member;
+          const c = item.cert;
+          const st = c ? c.status : 'not_requested';
+          let actions = '';
+          if (!r.present) {
+            actions = '<span class="muted">Mark team present first</span>';
+          } else {
+            if (!c || c.status === 'pending' || c.status === 'rejected') {
+              actions += '<button class="mini" data-cert-act="approve" data-reg-id="' + E(r.id) + '" data-member-id="' + E(m.id) + '" type="button">Approve</button> ';
+            }
+            if (!c || c.status !== 'issued') {
+              actions += '<button class="mini ok" data-cert-act="issue" data-reg-id="' + E(r.id) + '" data-member-id="' + E(m.id) + '" type="button">Issue</button> ';
+            }
+            if (c && c.status !== 'rejected' && c.status !== 'revoked') {
+              actions += '<button class="mini danger" data-cert-act="reject" data-reg-id="' + E(r.id) + '" data-member-id="' + E(m.id) + '" type="button">Reject</button> ';
+            }
+            if (c && c.status === 'issued') {
+              actions += '<button class="mini primary" data-dl-cert="' + E(r.id) + '" data-member-id="' + E(m.id) + '" type="button">Download PDF</button> ';
+              actions += '<button class="mini danger" data-cert-act="revoke" data-reg-id="' + E(r.id) + '" data-member-id="' + E(m.id) + '" type="button">Revoke</button>';
+            }
+          }
+
+          return '<tr>' +
+            '<td>' + (r.present ? '<input type="checkbox" class="cert-chk" data-reg-id="' + E(r.id) + '" data-member-id="' + E(m.id) + '">' : '') + '</td>' +
+            '<td><strong>' + E(m.name) + '</strong><br><small class="muted">' + E(m.regNo || m.roleInTeam) + '</small></td>' +
+            '<td>' + E(r.teamName) + '<br><small class="muted">' + E(r.collegeName) + '</small></td>' +
+            '<td>' + E(r.eventTitle) + '</td>' +
+            '<td><span class="pill ' + (r.present ? 'ok' : '') + '">' + (r.present ? 'Present' : 'Absent') + '</span></td>' +
+            '<td>' + (c ? pill(c.status) + '<br><small class="muted">' + E(c.certificateNumber) + '</small>' : '<span class="muted">Eligible</span>') + '</td>' +
+            '<td>' + actions + '</td>' +
+          '</tr>';
+        }).join('') || '<tr><td colspan="7" class="muted">No participants match this certificate filter.</td></tr>';
+      }
+
+      // Event listeners for filters
+      ['tq', 'te', 'ts'].forEach(function (id) { $(id).oninput = renderTeams; $(id).onchange = renderTeams; });
+      ['pq', 'pe'].forEach(function (id) { $(id).oninput = renderParticipants; $(id).onchange = renderParticipants; });
+      ['pay-ev', 'pay-st'].forEach(function (id) { $(id).onchange = renderPayments; });
+      ['cert-ev', 'cert-elig'].forEach(function (id) { $(id).onchange = renderCertificates; });
+
+      $('cert-all').onchange = function (e) {
+        document.querySelectorAll('.cert-chk').forEach(function (chk) { chk.checked = e.target.checked; });
+      };
+
+      $('bulk-issue').onclick = async function () {
+        const selected = Array.from(document.querySelectorAll('.cert-chk:checked'));
+        if (!selected.length) {
+          notify('Select at least one eligible participant.', false);
+          return;
+        }
+        let okCount = 0;
+        for (const chk of selected) {
+          const res = await Store.manageCertificate(chk.getAttribute('data-reg-id'), chk.getAttribute('data-member-id'), 'issue', '');
+          if (res.ok) okCount++;
+        }
+        notify('Issued ' + okCount + ' certificate(s).', true);
+        await draw();
+      };
+
+      // QR Scanner
+      async function handleCheckIn(code, method) {
+        const res = await Store.checkInByQr(code, method);
+        const box = $('checkin-msg');
+        box.textContent = res.msg;
+        box.className = 'msg show ' + (res.ok ? 'good' : (res.duplicate ? '' : 'bad'));
+        if (res.ok) await draw();
+      }
+
+      const scanner = NCCQr.createScanner('qr-reader', function (decodedText) {
+        const now = Date.now();
+        if (decodedText === lastScanText && now - lastScanTime < 3000) return;
+        lastScanText = decodedText;
+        lastScanTime = now;
+        handleCheckIn(decodedText, 'qr');
+      });
+
+      $('scan-start').onclick = async function () {
+        const r = await scanner.start();
+        if (!r.ok) {
+          const box = $('checkin-msg');
+          box.textContent = r.msg;
+          box.className = 'msg show bad';
+        }
+      };
+      $('scan-stop').onclick = function () { scanner.stop(); };
+
+      $('manual-checkin').onsubmit = async function (e) {
+        e.preventDefault();
+        await handleCheckIn(new FormData(e.target).get('code'), 'manual');
+        e.target.reset();
+      };
+
+      // Forms
+      $('ev-form').onsubmit = async function (e) {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const data = Object.fromEntries(fd);
+        data.registrationOpen = fd.get('registrationOpen') === 'on';
+        data.isSample = fd.get('isSample') === 'on';
+        const res = await Store.saveEvent(data);
+        notify(res.msg, res.ok);
+        if (res.ok) {
+          e.target.reset();
+          e.target.id.value = '';
+          e.target.registrationOpen.checked = true;
+          await draw();
+        }
+      };
+
+      $('cancel-edit').onclick = function () {
+        $('ev-form').reset();
+        $('ev-form').id.value = '';
+        $('ev-form').registrationOpen.checked = true;
+      };
+
+      $('role-form').onsubmit = async function (e) {
+        e.preventDefault();
+        const d = Object.fromEntries(new FormData(e.target));
+        const res = await Store.setUserRole(d.email, d.role);
+        notify(res.msg, res.ok);
+        if (res.ok) { e.target.reset(); await draw(); }
+      };
+
+      $('ann-form').onsubmit = async function (e) {
+        e.preventDefault();
+        const res = await Store.saveAnnouncement(Object.fromEntries(new FormData(e.target)));
+        notify(res.ok ? 'Announcement published.' : res.msg, res.ok);
+        if (res.ok) { e.target.reset(); await draw(); }
+      };
+
+      $('sched-form').onsubmit = async function (e) {
+        e.preventDefault();
+        const res = await Store.saveScheduleItem(Object.fromEntries(new FormData(e.target)));
+        notify(res.ok ? 'Schedule item added.' : res.msg, res.ok);
+        if (res.ok) { e.target.reset(); await draw(); }
+      };
+
+      // CSV Exports
+      $('exp-teams').onclick = function () {
+        const rows = [['Reg ID', 'Event', 'Fee', 'Team Name', 'College', 'NCC Unit', 'Leader', 'Leader Reg No', 'Leader Phone', 'Leader Email', 'Members Count', 'Reg Status', 'Payment Status', 'Payment Ref', 'Present']];
+        filteredTeams().forEach(function (r) {
+          rows.push([
+            r.registrationCode, r.eventTitle, r.eventFee, r.teamName, r.collegeName, r.nccUnit,
+            r.leaderName, r.leaderRegNo, r.leaderPhone, r.leaderEmail, r.members.length,
+            r.status, r.payment.status, r.payment.reference, r.present ? 'Yes' : 'No'
+          ]);
+        });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([Store.csv(rows)], { type: 'text/csv;charset=utf-8' }));
+        a.download = 'ncc-teams.csv';
+        a.click();
+      };
+
+      $('exp-parts').onclick = function () {
+        const rows = [['Reg ID', 'Event', 'Team', 'College', 'Participant', 'Role', 'Reg No', 'Dept', 'Year', 'Phone', 'Certificate Status', 'Certificate No']];
+        filteredParticipants().forEach(function (item) {
+          const r = item.reg;
+          const m = item.member;
+          rows.push([
+            r.registrationCode, r.eventTitle, r.teamName, r.collegeName,
+            m.name, m.roleInTeam, m.regNo, m.dept, m.year, m.phone || r.leaderPhone,
+            item.cert ? item.cert.status : 'none',
+            item.cert ? item.cert.certificateNumber : ''
+          ]);
+        });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([Store.csv(rows)], { type: 'text/csv;charset=utf-8' }));
+        a.download = 'ncc-participants.csv';
+        a.click();
+      };
+
+      // Delegated clicks & changes
+      document.body.addEventListener('click', async function (e) {
+        const t = e.target;
+        const editEv = t.getAttribute('data-edit-ev');
+        const delEv = t.getAttribute('data-del-ev');
+        const viewTeam = t.getAttribute('data-view-team');
+        const regSt = t.getAttribute('data-reg-st');
+        const regId = t.getAttribute('data-reg-id');
+        const payAct = t.getAttribute('data-pay-act');
+        const payId = t.getAttribute('data-pay-id');
+        const certAct = t.getAttribute('data-cert-act');
+        const dlCert = t.getAttribute('data-dl-cert');
+        const memberId = t.getAttribute('data-member-id');
+        const delAnn = t.getAttribute('data-del-ann');
+        const delSched = t.getAttribute('data-del-sched');
+
+        if (editEv) {
+          const ev = events.find(function (x) { return x.id === editEv; });
+          if (!ev) return;
+          const f = $('ev-form');
+          ['id', 'title', 'day', 'type', 'date', 'time', 'venue', 'seats', 'minTeamSize', 'maxTeamSize', 'fee', 'deadline', 'desc', 'criteria', 'rules'].forEach(function (k) {
+            if (f[k]) f[k].value = ev[k] ?? '';
+          });
+          f.registrationOpen.checked = ev.registrationOpen !== false;
+          f.isSample.checked = ev.isSample === true;
+          f.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        if (delEv && confirm('Delete this event and all its team registrations?')) {
+          const res = await Store.deleteEvent(delEv);
+          notify(res.msg, res.ok);
+          await draw();
+        }
+
+        if (viewTeam) {
+          const r = regs.find(function (x) { return x.id === viewTeam; });
+          if (!r) return;
+          $('tm-title').textContent = 'Team: ' + r.teamName + ' (' + r.eventTitle + ')';
+          $('tm-body').innerHTML =
+            '<p><strong>College:</strong> ' + E(r.collegeName) + ' · <strong>NCC Unit:</strong> ' + E(r.nccUnit || '—') + '</p>' +
+            '<p><strong>Leader:</strong> ' + E(r.leaderName) + ' (' + E(r.leaderPhone) + ', ' + E(r.leaderEmail) + ')</p>' +
+            '<div class="tbl" style="margin-bottom:0"><table><thead><tr><th>Name</th><th>Role</th><th>Reg. No.</th><th>Dept</th><th>Year</th><th>Phone</th></tr></thead><tbody>' +
+            r.members.map(function (m) {
+              return '<tr><td>' + E(m.name) + '</td><td>' + E(m.roleInTeam) + '</td><td>' + E(m.regNo || '—') + '</td><td>' + E(m.dept || '—') + '</td><td>' + E(m.year || '—') + '</td><td>' + E(m.phone || '—') + '</td></tr>';
+            }).join('') +
+            '</tbody></table></div>';
+          $('team-modal').classList.add('open');
+        }
+
+        if (regSt && regId) {
+          const res = await Store.updateRegStatus(regId, regSt);
+          notify(res.msg, res.ok);
+          if (res.ok) await draw();
+        }
+
+        if (payAct && payId) {
+          const res = await Store.verifyPayment(payId, payAct);
+          notify(res.msg, res.ok);
+          if (res.ok) await draw();
+        }
+
+        if (certAct && regId && memberId) {
+          let reason = '';
+          if (certAct === 'reject') {
+            reason = prompt('Optional rejection reason:') || '';
+          }
+          const res = await Store.manageCertificate(regId, memberId, certAct, reason);
+          notify(res.msg, res.ok);
+          if (res.ok) await draw();
+        }
+
+        if (dlCert && memberId) {
+          const r = regs.find(function (x) { return x.id === dlCert; });
+          const c = r && r.certByMember && r.certByMember[memberId];
+          if (!c || c.status !== 'issued') return;
+          const out = NCCCert.generateCertificatePdf({
+            certificateNumber: c.certificateNumber,
+            participantName: c.participantName,
+            teamName: c.teamName || r.teamName,
+            collegeName: c.collegeName || r.collegeName,
+            eventTitle: c.eventTitle || r.eventTitle,
+            eventDate: c.eventDate || r.eventDate,
+            issuedAt: c.issuedAt,
+            registrationCode: r.registrationCode
+          }, Store.config());
+          if (!out.ok) notify(out.msg, false);
+        }
+
+        if (delAnn) { await Store.deleteAnnouncement(delAnn); await draw(); }
+        if (delSched) { await Store.deleteScheduleItem(delSched); await draw(); }
+      });
+
+      document.body.addEventListener('change', async function (e) {
+        const pId = e.target.getAttribute('data-present');
+        if (pId) {
+          const res = await Store.setPresent(pId, e.target.checked);
+          if (!res.ok) notify(res.msg, false);
+          await draw();
+        }
+      });
+
+      $('tm-close').onclick = function () { $('team-modal').classList.remove('open'); };
+
+      await draw();
+    });
+  </script>
+</body>
+</html>

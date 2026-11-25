@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1f3a">
+  <meta name="description" content="NCC Two-Day Event Registration and Management Portal — Firing and Drill team events.">
+  <title>NCC Two-Day Event | Official Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="scripts/config.js"></script>
+  <script src="scripts/utils.js"></script>
+  <script src="scripts/store.js" defer></script>
+  <script src="scripts/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div id="hdr"></div>
+
+  <main id="main">
+    <section class="hero">
+      <div class="hero-grid" aria-hidden="true"></div>
+      <div class="container hero-content">
+        <p class="eyebrow"><span class="eyebrow-dot"></span> NATIONAL CADET CORPS · UNITY AND DISCIPLINE</p>
+        <h1>NCC Two-Day <span>Event Portal</span></h1>
+        <p class="hero-copy">Official team registration, schedule, payment tracking, attendance check-in, and certificate portal for our college NCC two-day event.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="register.html">Register a Team</a>
+          <a class="button button-quiet" href="events.html">Explore Events</a>
+          <a class="button button-quiet" href="my.html">Participant Dashboard</a>
+        </div>
+        <div class="event-meta">
+          <div><span class="meta-label">COLLEGE &amp; UNIT</span><strong id="meta-college">College NCC Unit (Sample)</strong></div>
+          <div><span class="meta-label">EVENT DATES</span><strong id="meta-when">Two-Day Event (Sample Dates TBA)</strong></div>
+          <div><span class="meta-label">VENUE</span><strong id="meta-where">College Parade Ground &amp; Firing Range</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-white">
+      <div class="container">
+        <p class="eyebrow eyebrow-dark">FEATURED EVENTS (SAMPLE DATA)</p>
+        <h2>Event Categories &amp; Fees</h2>
+        <p class="sub" style="margin-bottom:18px;color:#475b75">Select an event to review eligibility, rules, team size limits, and open team slots. Sample event details can be edited by the admin.</p>
+        <div id="setup"></div>
+        <div class="cards" id="home-events">
+          <article class="ev">
+            <div class="pill-row"><span class="pill">Day 1 · Sample Event</span><span class="pill navy">₹400</span></div>
+            <h3>Firing</h3>
+            <small>College NCC Range (Sample Venue)</small>
+            <p>Team firing drill and range safety discipline event conducted under authorized instructors.</p>
+            <a class="button button-primary" href="events.html">View Event Details</a>
+          </article>
+          <article class="ev">
+            <div class="pill-row"><span class="pill">Day 2 · Sample Event</span><span class="pill navy">₹400</span></div>
+            <h3>Drill</h3>
+            <small>Main College Parade Ground (Sample Venue)</small>
+            <p>Inter-unit squad drill competition evaluating turnout, synchronization, and command precision.</p>
+            <a class="button button-primary" href="events.html">View Event Details</a>
+          </article>
+        </div>
+        <div id="live-announcements" class="announcement-list" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section id="schedule" class="section section-dark">
+      <div class="container">
+        <p class="eyebrow">TWO-DAY AGENDA</p>
+        <h2>Event Schedule</h2>
+        <div class="schedule-grid">
+          <article class="day-card">
+            <div class="day-top"><span>DAY 01</span><span>Firing &amp; Briefing (Sample)</span></div>
+            <ol class="timeline" id="sched-day1">
+              <li><span class="timeline-time">08:00 AM</span><div><strong>Reporting &amp; QR Check-In</strong><small>Team verification at registration desk</small></div></li>
+              <li><span class="timeline-time">09:30 AM</span><div><strong>Firing Event</strong><small>Instructor-supervised range safety drill</small></div></li>
+            </ol>
+          </article>
+          <article class="day-card">
+            <div class="day-top"><span>DAY 02</span><span>Drill &amp; Closing (Sample)</span></div>
+            <ol class="timeline" id="sched-day2">
+              <li><span class="timeline-time">08:15 AM</span><div><strong>Parade Ground Roll Call</strong><small>Squad inspection and slot briefing</small></div></li>
+              <li><span class="timeline-time">09:00 AM</span><div><strong>Drill Competition</strong><small>Squad drill rounds and closing recognition</small></div></li>
+            </ol>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-main">
+      <a class="brand" href="#"><span class="brand-mark">NCC</span><span><strong>NCC TWO-DAY EVENT</strong><small id="footer-unit">NATIONAL CADET CORPS</small></span></a>
+      <p id="footer-contact">Helpdesk: ncc.event@college.edu · +91 90000 00000</p>
+      <a href="#main" class="back-top">Back to top ↑</a>
+    </div>
+    <div class="container footer-bottom">
+      <span>© <span id="year"></span> NCC Event Committee</span>
+      <span>Demo Payment Mode active until official college gateway authorization</span>
+    </div>
+  </footer>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', async function () {
+      if (!window.Store) return;
+      const cfg = Store.config();
+      const E = Store.esc;
+      const setText = function (id, val) { const el = document.getElementById(id); if (el && val) el.textContent = val; };
+      setText('meta-college', cfg.COLLEGE_NAME);
+      setText('meta-when', cfg.EVENT_DATES);
+      setText('meta-where', cfg.EVENT_VENUE);
+      setText('footer-unit', cfg.NCC_UNIT);
+      setText('footer-contact', 'Helpdesk: ' + cfg.CONTACT_EMAIL + ' · ' + cfg.CONTACT_PHONE);
+      document.getElementById('setup').innerHTML = Store.setupBannerHtml();
+
+      if (!Store.isConfigured()) return;
+
+      const [evs, anns, sched] = await Promise.all([
+        Store.events(),
+        Store.announcements(false),
+        Store.scheduleItems()
+      ]);
+
+      if (evs.length) {
+        document.getElementById('home-events').innerHTML = evs.map(function (e) {
+          const statusClass = !e.registrationOpen ? 'danger' : (e.left > 0 ? 'ok' : 'warn');
+          const statusText = !e.registrationOpen ? 'Closed' : (e.left > 0 ? e.left + ' team slots left' : 'Full');
+          return '<article class="ev">' +
+            '<div class="pill-row"><span class="pill">Day ' + e.day + (e.isSample ? ' · Sample' : '') + '</span><span class="pill navy">' + E(Store.formatFee(e.fee)) + '</span><span class="pill ' + statusClass + '">' + E(statusText) + '</span></div>' +
+            '<h3>' + E(e.title) + '</h3>' +
+            '<small>' + E(e.date) + ' · ' + E(e.time) + ' · ' + E(e.venue) + '</small>' +
+            '<p>' + E(e.desc) + '</p>' +
+            '<div class="tools" style="margin-bottom:0"><a class="button button-primary" style="flex:1" href="event.html?id=' + encodeURIComponent(e.id) + '">Details</a><a class="button button-quiet" style="color:var(--navy);border-color:var(--line);flex:1" href="register.html?eventId=' + encodeURIComponent(e.id) + '">Register Team</a></div>' +
+          '</article>';
+        }).join('');
+      }
+
+      const annBox = document.getElementById('live-announcements');
+      if (annBox && anns.length) {
+        annBox.innerHTML = anns.slice(0, 3).map(function (a) {
+          return '<div class="announcement-item"><strong>' + E(a.title) + '</strong><p>' + E(a.body) + '</p></div>';
+        }).join('');
+      }
+
+      if (sched.length) {
+        const renderDay = function (id, day) {
+          const items = sched.filter(function (s) { return Number(s.day) === day; });
+          const el = document.getElementById(id);
+          if (el && items.length) {
+            el.innerHTML = items.map(function (s) {
+              return '<li><span class="timeline-time">' + E(s.time_label) + '</span><div><strong>' + E(s.title) + '</strong><small>' + E(s.subtitle) + '</small></div></li>';
+            }).join('');
+          }
+        };
+        renderDay('sched-day1', 1);
+        renderDay('sched-day2', 2);
+      }
+    });
+  </script>
+</body>
+</html>

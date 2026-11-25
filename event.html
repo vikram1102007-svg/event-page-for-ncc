@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1f3a">
+  <title>Event Details | NCC Two-Day Event</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="scripts/config.js"></script>
+  <script src="scripts/utils.js"></script>
+  <script src="scripts/store.js" defer></script>
+  <script src="scripts/app.js" defer></script>
+</head>
+<body>
+  <div id="hdr"></div>
+  <main class="page">
+    <div class="container">
+      <div id="setup"></div>
+      <div id="box"><p class="muted">Loading event details...</p></div>
+    </div>
+  </main>
+  <script>
+    window.addEventListener('DOMContentLoaded', async function () {
+      const E = Store.esc;
+      const id = new URLSearchParams(window.location.search).get('id');
+      const box = document.getElementById('box');
+      document.getElementById('setup').innerHTML = Store.setupBannerHtml();
+
+      const ev = await Store.event(id);
+      if (!ev) {
+        box.innerHTML = '<h1>Event not found</h1><p class="sub">Return to the events directory to select an event.</p><a class="button button-primary" href="events.html">Back to events</a>';
+        return;
+      }
+
+      const canReg = ev.registrationOpen && ev.left > 0;
+      const statusClass = !ev.registrationOpen ? 'danger' : (ev.left > 0 ? 'ok' : 'warn');
+      const statusText = !ev.registrationOpen ? 'Closed' : (ev.left > 0 ? 'Open (' + ev.left + ' of ' + ev.seats + ' team slots left)' : 'Full');
+
+      box.innerHTML =
+        '<div class="pill-row" style="margin-bottom:10px">' +
+          '<span class="pill">Day ' + ev.day + (ev.isSample ? ' · Sample Event' : '') + '</span>' +
+          '<span class="pill navy">Fee: ' + E(Store.formatFee(ev.fee)) + '</span>' +
+          '<span class="pill ' + statusClass + '">' + E(statusText) + '</span>' +
+        '</div>' +
+        '<h1>' + E(ev.title) + '</h1>' +
+        '<p class="sub">' + E(ev.date) + ' · ' + E(ev.time) + ' · ' + E(ev.venue) + '</p>' +
+        '<div class="box" style="max-width:780px">' +
+          '<div class="reg-grid">' +
+            '<div class="reg-kv"><strong>Event Date &amp; Time</strong>' + E(ev.date) + ' (' + E(ev.time) + ')</div>' +
+            '<div class="reg-kv"><strong>Venue</strong>' + E(ev.venue) + '</div>' +
+            '<div class="reg-kv"><strong>Team Size</strong>' + ev.minTeamSize + ' to ' + ev.maxTeamSize + ' members (incl. leader)</div>' +
+            '<div class="reg-kv"><strong>Registration Deadline</strong>' + E(ev.deadline || 'TBA') + '</div>' +
+          '</div>' +
+          '<h3>Event Description</h3><p>' + E(ev.desc || 'Details pending organizer update.') + '</p>' +
+          '<h3>Eligibility Criteria</h3><p>' + E(ev.criteria || 'Open to eligible NCC cadets.') + '</p>' +
+          '<h3>Rules &amp; Instructions</h3><p>' + E(ev.rules || 'Follow standard NCC event and safety rules.') + '</p>' +
+          '<div class="tools" style="margin-top:18px;margin-bottom:0">' +
+            (canReg
+              ? '<a class="button button-primary" href="register.html?eventId=' + encodeURIComponent(ev.id) + '">Register Team for ' + E(ev.title) + ' (' + E(Store.formatFee(ev.fee)) + ')</a>'
+              : '<button class="button button-primary" disabled>' + E(statusText) + '</button>') +
+            '<a class="button button-quiet" style="color:var(--navy);border-color:var(--line)" href="events.html">Back to Events</a>' +
+          '</div>' +
+        '</div>';
+    });
+  </script>
+</body>
+</html>

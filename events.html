@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1f3a">
+  <title>Events | NCC Two-Day Event</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="scripts/config.js"></script>
+  <script src="scripts/utils.js"></script>
+  <script src="scripts/store.js" defer></script>
+  <script src="scripts/app.js" defer></script>
+</head>
+<body>
+  <div id="hdr"></div>
+  <main class="page">
+    <div class="container">
+      <div class="split-head">
+        <div>
+          <h1>NCC Event Directory</h1>
+          <p class="sub">Browse Day 1 and Day 2 events, team size limits, registration fees, and open team slots.</p>
+        </div>
+        <a class="button button-primary" href="register.html">Register a Team</a>
+      </div>
+      <div id="setup"></div>
+      <div class="tools">
+        <input id="q" type="search" placeholder="Search events (e.g. Firing, Drill)" aria-label="Search events">
+        <select id="d" aria-label="Filter by day">
+          <option value="">Both days</option>
+          <option value="1">Day 1</option>
+          <option value="2">Day 2</option>
+        </select>
+      </div>
+      <div class="cards" id="list"><p class="muted">Loading events...</p></div>
+    </div>
+  </main>
+  <script>
+    window.addEventListener('DOMContentLoaded', async function () {
+      const $ = function (id) { return document.getElementById(id); };
+      const E = Store.esc;
+      $('setup').innerHTML = Store.setupBannerHtml();
+
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('day') === '1' || params.get('day') === '2') $('d').value = params.get('day');
+
+      const allEvents = await Store.events();
+
+      function draw() {
+        const q = $('q').value.trim().toLowerCase();
+        const d = $('d').value;
+        const filtered = allEvents.filter(function (e) {
+          return (!d || String(e.day) === d) && (e.title + ' ' + e.desc + ' ' + e.venue).toLowerCase().includes(q);
+        });
+
+        $('list').innerHTML = filtered.map(function (e) {
+          const closed = !e.registrationOpen;
+          const statusClass = closed ? 'danger' : (e.left > 0 ? 'ok' : 'warn');
+          const statusText = closed ? 'Closed' : (e.left > 0 ? e.left + ' of ' + e.seats + ' team slots left' : 'Full');
+          return '<article class="ev">' +
+            '<div class="pill-row">' +
+              '<span class="pill">Day ' + e.day + (e.isSample ? ' · Sample' : '') + '</span>' +
+              '<span class="pill navy">' + E(Store.formatFee(e.fee)) + '</span>' +
+              '<span class="pill ' + statusClass + '">' + E(statusText) + '</span>' +
+            '</div>' +
+            '<h3>' + E(e.title) + '</h3>' +
+            '<small>' + E(e.date) + ' · ' + E(e.time) + '<br>' + E(e.venue) + ' · Team size: ' + e.minTeamSize + '–' + e.maxTeamSize + '</small>' +
+            '<p>' + E(e.desc) + '</p>' +
+            '<div class="tools" style="margin-top:auto;margin-bottom:0">' +
+              '<a class="button button-primary" style="flex:1" href="event.html?id=' + encodeURIComponent(e.id) + '">View Details</a>' +
+              (e.registrationOpen && e.left > 0 ? '<a class="button button-quiet" style="color:var(--navy);border-color:var(--line);flex:1" href="register.html?eventId=' + encodeURIComponent(e.id) + '">Register Team</a>' : '') +
+            '</div>' +
+          '</article>';
+        }).join('') || '<p class="muted">No events found.</p>';
+      }
+
+      $('q').oninput = draw;
+      $('d').onchange = draw;
+      draw();
+    });
+  </script>
+</body>
+</html>

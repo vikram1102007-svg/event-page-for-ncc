@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1f3a">
+  <title>Team Registration | NCC Two-Day Event</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="scripts/config.js"></script>
+  <script src="scripts/utils.js"></script>
+  <script src="scripts/store.js" defer></script>
+  <script src="scripts/app.js" defer></script>
+</head>
+<body>
+  <div id="hdr"></div>
+  <main class="page">
+    <div class="container">
+      <h1>Team Registration</h1>
+      <p class="sub">Register your college NCC team for Firing or Drill. Each event has its own registration and payment record.</p>
+      <div id="setup"></div>
+      <div id="auth-gate" class="msg"></div>
+
+      <div class="box box-wide" style="max-width:860px">
+        <div class="msg" id="reg-msg" role="status"></div>
+        <form class="form" id="team-form">
+          <div class="row2">
+            <label>Selected Event
+              <select name="eventId" id="ev-select" required>
+                <option value="">Loading events...</option>
+              </select>
+            </label>
+            <div id="ev-summary" class="announcement-item" style="margin:0">
+              <strong>Event Fee &amp; Team Limits</strong>
+              <p>Select an event to view fee and team size requirements.</p>
+            </div>
+          </div>
+
+          <h2>Team &amp; Unit Details</h2>
+          <div class="row3">
+            <label>Team Name<input name="teamName" required maxlength="80" placeholder="e.g. Alpha Squad"></label>
+            <label>College Name<input name="collegeName" required maxlength="120" placeholder="Your College Name"></label>
+            <label>NCC Unit<input name="nccUnit" required maxlength="80" placeholder="e.g. 1 TN Bn NCC"></label>
+          </div>
+
+          <h2>Team Leader &amp; Contact Details</h2>
+          <div class="row2">
+            <label>Team Leader Name<input name="leaderName" required maxlength="80"></label>
+            <label>Leader Regimental / Roll No.<input name="leaderRegNo" required maxlength="40"></label>
+          </div>
+          <div class="row2">
+            <label>Leader Mobile Number<input name="leaderPhone" type="tel" required pattern="[0-9+\s-]{10,15}" title="10-digit phone number"></label>
+            <label>Leader Email<input name="leaderEmail" type="email" required></label>
+          </div>
+
+          <div class="split-head" style="margin:12px 0 4px">
+            <div>
+              <h2 style="margin:0">Team Members <small class="muted" id="size-hint" style="font-weight:500;font-size:13px"></small></h2>
+            </div>
+            <button class="mini primary" id="add-member" type="button">+ Add Team Member</button>
+          </div>
+          <p class="muted" style="margin:0;font-size:13px">The Team Leader above counts as member #1. Add remaining team members below.</p>
+          <div id="members-wrap"></div>
+
+          <div class="msg show" style="margin-top:8px">
+            <strong>Demo Payment Notice:</strong> Submitting creates your team registration with status <em>Pending</em>. Payment confirmation is simulated in Demo Mode and verified by an administrator.
+          </div>
+
+          <div class="tools" style="margin-bottom:0">
+            <button class="button button-primary" id="submit-btn" type="submit">Submit Team Registration</button>
+            <a class="button button-quiet" style="color:var(--navy);border-color:var(--line)" href="events.html">Back to Events</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', async function () {
+      const $ = function (id) { return document.getElementById(id); };
+      const E = Store.esc;
+      $('setup').innerHTML = Store.setupBannerHtml();
+
+      const params = new URLSearchParams(window.location.search);
+      const preEventId = params.get('eventId') || '';
+
+      const u = await Store.user();
+      if (!u && Store.isConfigured()) {
+        const nextUrl = 'register.html' + (preEventId ? '?eventId=' + encodeURIComponent(preEventId) : '');
+        $('auth-gate').innerHTML = 'Please <a href="login.html?next=' + encodeURIComponent(nextUrl) + '" style="text-decoration:underline;font-weight:700">log in or create a participant account</a> to register a team.';
+        $('auth-gate').className = 'msg show';
+      }
+
+      const events = await Store.events();
+      const sel = $('ev-select');
+      if (!events.length) {
+        sel.innerHTML = '<option value="">No events available</option>';
+      } else {
+        sel.innerHTML = events.map(function (ev) {
+          const disabled = !ev.registrationOpen || ev.left < 1;
+          return '<option value="' + E(ev.id) + '" ' + (disabled ? 'disabled' : '') + '>' +
+            E(ev.title) + ' — ' + E(Store.formatFee(ev.fee)) +
+            ' (' + (ev.registrationOpen ? ev.left + ' slots left' : 'Closed') + ')' +
+          '</option>';
+        }).join('');
+        if (preEventId && events.some(function (ev) { return ev.id === preEventId; })) {
+          sel.value = preEventId;
+        }
+      }
+
+      const form = $('team-form');
+      if (u) {
+        form.collegeName.value = u.college || '';
+        form.nccUnit.value = u.nccUnit || '';
+        form.leaderName.value = u.name || '';
+        form.leaderRegNo.value = u.regNo || '';
+        form.leaderPhone.value = u.phone || '';
+        form.leaderEmail.value = u.email || '';
+      }
+
+      function currentEvent() {
+        return events.find(function (ev) { return ev.id === sel.value; }) || null;
+      }
+
+      function addMemberRow(prefill) {
+        const row = document.createElement('div');
+        row.className = 'member-row';
+        row.innerHTML =
+          '<input name="m_name" placeholder="Full Name" required maxlength="80" value="' + E(prefill && prefill.name || '') + '">' +
+          '<input name="m_reg" placeholder="Regimental / Roll No." required maxlength="40" value="' + E(prefill && prefill.regNo || '') + '">' +
+          '<input name="m_dept" placeholder="Department" maxlength="60" value="' + E(prefill && prefill.dept || '') + '">' +
+          '<input name="m_year" placeholder="Year" maxlength="10" value="' + E(prefill && prefill.year || '') + '">' +
+          '<input name="m_phone" placeholder="Phone" maxlength="15" value="' + E(prefill && prefill.phone || '') + '">' +
+          '<button class="mini danger" type="button" aria-label="Remove member">Remove</button>';
+        row.querySelector('button').onclick = function () {
+          row.remove();
+          updateEventSummary();
+        };
+        $('members-wrap').appendChild(row);
+        updateEventSummary();
+      }
+
+      function updateEventSummary() {
+        const ev = currentEvent();
+        const memberCount = $('members-wrap').querySelectorAll('.member-row').length;
+        const total = 1 + memberCount;
+        if (!ev) {
+          $('ev-summary').innerHTML = '<strong>No active event selected</strong><p>Configure Supabase events first.</p>';
+          return;
+        }
+        $('ev-summary').innerHTML =
+          '<strong>' + E(ev.title) + ' — ' + E(Store.formatFee(ev.fee)) + '</strong>' +
+          '<p>Team size: ' + ev.minTeamSize + '–' + ev.maxTeamSize + ' (Current: ' + total + ') · Slots left: ' + ev.left + '</p>';
+        $('size-hint').textContent = '(Total team size required: ' + ev.minTeamSize + '–' + ev.maxTeamSize + ')';
+
+        while ($('members-wrap').querySelectorAll('.member-row').length + 1 < ev.minTeamSize) {
+          addMemberRow();
+        }
+      }
+
+      $('add-member').onclick = function () {
+        const ev = currentEvent();
+        const total = 1 + $('members-wrap').querySelectorAll('.member-row').length;
+        if (ev && total >= ev.maxTeamSize) {
+          const m = $('reg-msg');
+          m.textContent = 'Maximum team size (' + ev.maxTeamSize + ') reached for ' + ev.title + '.';
+          m.className = 'msg show bad';
+          return;
+        }
+        addMemberRow();
+      };
+
+      sel.onchange = updateEventSummary;
+      updateEventSummary();
+
+      form.onsubmit = async function (e) {
+        e.preventDefault();
+        const msg = $('reg-msg');
+        if (!u) {
+          window.location.href = 'login.html?next=' + encodeURIComponent('register.html?eventId=' + sel.value);
+          return;
+        }
+        const ev = currentEvent();
+        if (!ev) {
+          msg.textContent = 'Please select an open event.';
+          msg.className = 'msg show bad';
+          return;
+        }
+
+        const members = Array.from($('members-wrap').querySelectorAll('.member-row')).map(function (row) {
+          return {
+            name: row.querySelector('[name="m_name"]').value.trim(),
+            regNo: row.querySelector('[name="m_reg"]').value.trim(),
+            dept: row.querySelector('[name="m_dept"]').value.trim(),
+            year: row.querySelector('[name="m_year"]').value.trim(),
+            phone: row.querySelector('[name="m_phone"]').value.trim()
+          };
+        }).filter(function (m) { return m.name !== ''; });
+
+        const payload = {
+          eventId: ev.id,
+          teamName: form.teamName.value.trim(),
+          collegeName: form.collegeName.value.trim(),
+          nccUnit: form.nccUnit.value.trim(),
+          leaderName: form.leaderName.value.trim(),
+          leaderRegNo: form.leaderRegNo.value.trim(),
+          leaderPhone: form.leaderPhone.value.trim(),
+          leaderEmail: form.leaderEmail.value.trim(),
+          members: members
+        };
+
+        const check = NCCUtils.validateTeamRegistration(payload, ev);
+        if (!check.ok) {
+          msg.textContent = check.msg;
+          msg.className = 'msg show bad';
+          return;
+        }
+
+        const btn = $('submit-btn');
+        btn.disabled = true;
+        btn.textContent = 'Submitting registration...';
+
+        const res = await Store.registerTeam(payload);
+        if (res.login) {
+          window.location.href = 'login.html?next=' + encodeURIComponent('register.html?eventId=' + ev.id);
+          return;
+        }
+
+        msg.textContent = res.msg + (res.registration_code ? ' Registration ID: ' + res.registration_code : '');
+        msg.className = 'msg show ' + (res.ok ? 'good' : 'bad');
+
+        if (res.ok) {
+          setTimeout(function () { window.location.href = 'my.html'; }, 1200);
+        } else {
+          btn.disabled = false;
+          btn.textContent = 'Submit Team Registration';
+        }
+      };
+    });
+  </script>
+</body>
+</html>
