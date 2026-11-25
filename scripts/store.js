@@ -231,7 +231,7 @@
       return cachedUser;
     },
 
-    signup: async function (u) {
+    signup: async function (u, emailRedirectTo) {
       const sb = getClient();
       if (!sb) return { ok: false, msg: notConfiguredMsg() };
 
@@ -243,6 +243,7 @@
         email: email,
         password: u.password,
         options: {
+          emailRedirectTo: emailRedirectTo || undefined,
           data: {
             name: String(u.name).trim(),
             reg_no: String(u.regNo || '').trim(),
@@ -449,6 +450,41 @@
       const res = await sb.rpc('submit_demo_payment', { p_registration_id: regId });
       if (res.error) return { ok: false, msg: res.error.message };
       return res.data || { ok: false, msg: 'Could not submit demo payment.' };
+    },
+
+    startGatewayPayment: async function (regId) {
+      const sb = getClient(), cfg = getConfig();
+      if (!sb) return { ok: false, msg: notConfiguredMsg() };
+      if (!cfg.RAZORPAY_KEY_ID) return { ok: false, msg: 'Online payment is not configured. The organizer must add Razorpay credentials in Vercel.' };
+      const sessionRes = await sb.auth.getSession(), session = sessionRes && sessionRes.data && sessionRes.data.session;
+      if (!session || !session.access_token) return { ok: false, msg: 'Your session expired. Please log in again.' };
+      try {
+        const orderRes = await fetch('/api/payment/create-order', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token }, body: JSON.stringify({ registrationId: regId }) });
+        const order = await orderRes.json();
+        if (!orderRes.ok || !order.ok) return { ok: false, msg: order.msg || 'Could not create payment order.' };
+        if (!window.Razorpay) await new Promise(function (resolve, reject) {
+          const script = document.createElement('script'); script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.onload = resolve; script.onerror = function () { reject(new Error('Razorpay Checkout failed to load.')); };
+          document.head.appendChild(script);
+        });
+        return await new Promise(function (resolve) {
+          const checkout = new window.Razorpay({
+            key: order.key, amount: order.amount, currency: order.currency || 'INR',
+            name: cfg.COLLEGE_NAME || 'NCC Event Registration', description: order.eventTitle || 'Event registration fee',
+            order_id: order.orderId, prefill: { name: order.participantName || '', email: order.email || '' },
+            notes: { registration_id: regId }, theme: { color: '#0b1f3a' },
+            handler: async function (response) {
+              try {
+                const vr = await fetch('/api/payment/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token }, body: JSON.stringify({ registrationId: regId, razorpay_order_id: response.razorpay_order_id, razorpay_payment_id: response.razorpay_payment_id, razorpay_signature: response.razorpay_signature }) });
+                const result = await vr.json(); resolve({ ok: vr.ok && result.ok, msg: result.msg || 'Payment verification failed.' });
+              } catch (_) { resolve({ ok: false, msg: 'Payment submitted, but verification did not respond. Refresh your dashboard and contact the organizer before paying again.' }); }
+            },
+            modal: { ondismiss: function () { resolve({ ok: false, cancelled: true, msg: 'Checkout closed. Your registration is saved; you can retry payment from the dashboard.' }); } }
+          });
+          checkout.on('payment.failed', function (response) { resolve({ ok: false, msg: response.error && response.error.description || 'Payment failed.' }); });
+          checkout.open();
+        });
+      } catch (err) { return { ok: false, msg: err.message || 'Unable to start payment.' }; }
     },
 
     requestCertificate: async function (regId, memberId) {
