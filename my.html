@@ -186,6 +186,7 @@
         $('regs-wrap').innerHTML = regs.map(function (r) {
           const pay = r.payment || { amount: r.eventFee, status: 'pending', mode: 'demo', reference: '' };
           const canDemoSubmit = pay.status === 'pending' && !pay.reference;
+          const demoMode = Store.config().DEMO_PAYMENT_MODE !== false;
 
           const membersRows = r.members.map(function (m) {
             const cert = r.certByMember[m.id];
@@ -238,7 +239,7 @@
             '<div class="tools" style="margin-bottom:14px">' +
               '<button class="mini primary" data-qr="' + E(r.id) + '" type="button">View QR Pass</button>' +
               '<button class="mini" data-rcpt="' + E(r.id) + '" type="button">Payment Receipt / Ref</button>' +
-              (canDemoSubmit ? '<button class="mini ok" data-demo-pay="' + E(r.id) + '" type="button">Submit Demo Payment (' + E(Store.formatFee(pay.amount)) + ')</button>' : '') +
+              (canDemoSubmit ? (demoMode ? '<button class="mini ok" data-demo-pay="' + E(r.id) + '" type="button">Submit Demo Payment (' + E(Store.formatFee(pay.amount)) + ')</button>' : '<button class="mini ok" data-gateway-pay="' + E(r.id) + '" type="button">Pay Securely (' + E(Store.formatFee(pay.amount)) + ')</button>') : '') +
             '</div>' +
 
             '<div class="tbl" style="margin-bottom:0">' +
@@ -254,6 +255,7 @@
         const qrId = t.getAttribute('data-qr');
         const rcptId = t.getAttribute('data-rcpt');
         const payId = t.getAttribute('data-demo-pay');
+        const gatewayPayId = t.getAttribute('data-gateway-pay');
         const reqCertReg = t.getAttribute('data-req-cert');
         const dlCertReg = t.getAttribute('data-dl-cert');
         const memberId = t.getAttribute('data-member');
@@ -292,6 +294,15 @@
           const m = $('act-msg');
           m.textContent = res.msg;
           m.className = 'msg show ' + (res.ok ? 'good' : 'bad');
+          if (res.ok) await loadRegs();
+        }
+
+        if (gatewayPayId) {
+          const button = t; button.disabled = true; button.textContent = 'Opening secure checkout...';
+          const res = await Store.startGatewayPayment(gatewayPayId);
+          const m = $('act-msg'); m.textContent = res.msg;
+          m.className = 'msg show ' + (res.ok ? 'good' : (res.cancelled ? '' : 'bad'));
+          button.disabled = false; button.textContent = 'Pay Securely';
           if (res.ok) await loadRegs();
         }
 
