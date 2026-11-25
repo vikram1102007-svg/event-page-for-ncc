@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node scripts/generate-config.mjs",
     "test": "node --test",
-    "check": "node --check scripts/app.js && node --check scripts/utils.js && node --check scripts/store.js && node --check scripts/qr.js && node --check scripts/cert.js && node --check scripts/config.js && node --check scripts/generate-config.mjs && node --test"
+    "check": "node --check scripts/app.js && node --check scripts/utils.js && node --check scripts/store.js && node --check scripts/qr.js && node --check scripts/cert.js && node --check scripts/config.js && node --check scripts/generate-config.mjs && node --check api/payment/create-order.js && node --check api/payment/verify.js && node --test"
   },
   "engines": {
     "node": ">=20"
